@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - internal
+    # MongoDB is NOT exposed to the host — internal only
+
+  fastapi-app:
+    build:
+      context: ./backend_api
+    container_name: fastapi-app
+    restart: unless-stopped
+    env_file:
+      - ./backend_api/.env
+    environment:
+      - MONGODB_URL=mongodb://mongo:27017
+    ports:
+      - "8000:8000"
+    volumes:
+      - photo_data:/data/photos
+    depends_on:
+      - mongo
+    networks:
+      - internal
+
+  admin-frontend:
+    build:
+      context: ./backend_admin_page
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://api.west_end_glass.customertest.digitalbullet.net}
+    container_name: admin-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - internal
+
+volumes:
+  mongo_data:
+  photo_data:
+
+networks:
+  internal:
+    driver: bridge
