@@ -149,3 +149,39 @@ def test_simulator_mode_2_machine_not_found(client, test_user_doc):
         assert data["authorized"] is True
         assert data["ticket_id"] is None
         assert "no" in data["response_text"].lower()
+
+
+# ─── Simulate ref-photo tests ─────────────────────────────────────────────────
+
+def test_simulate_ref_photo_upload(client, test_user_doc, test_ticket_doc):
+    """Simulate a reference photo upload — mocks WhatsApp and returns whatsapp_simulated."""
+    phone = test_user_doc["phone_number"]
+    ticket_id = str(test_ticket_doc["_id"])
+
+    with patch("app.routers.simulate.get_db") as mock_get_db, \
+         patch("app.auth.is_phone_authorized", new_callable=AsyncMock, return_value=True), \
+         patch("app.routers.simulate.log_event"), \
+         patch("app.routers.simulate.os.makedirs"), \
+         patch("builtins.open", MagicMock()), \
+         patch("app.routers.simulate.shutil.copyfileobj"):
+
+        mock_db = AsyncMock()
+        mock_get_db.return_value = mock_db
+        mock_db.tickets.find_one.return_value = {
+            **test_ticket_doc,
+            "reference_photos": [],
+            "assigned_to": phone,
+        }
+        mock_db.tickets.update_one.return_value = AsyncMock()
+
+        img_bytes = b"\xff\xd8\xff\xe0" + b"\x00" * 20
+        response = client.post(
+            "/simulate/ref-photo",
+            params={"ticket_id": ticket_id, "phone_number": phone},
+            files=[("photo", ("ref.jpg", img_bytes, "image/jpeg"))],
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["saved"] is True
+    assert data["whatsapp_simulated"] is True

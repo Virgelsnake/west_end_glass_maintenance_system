@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import client from "../api/client";
 
 const COMPLETION_TYPES = ["confirmation", "note", "photo", "manual"];
@@ -31,8 +32,7 @@ export default function Tickets() {
     setShowCreate(true);
   }
 
-  async function handleCreate(payload) {
-    await client.post("/tickets", payload);
+  function handleCreate() {
     setShowCreate(false);
     load();
   }
@@ -108,8 +108,26 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
     priority: 1,
   });
   const [steps, setSteps] = useState([{ label: "", completion_type: "confirmation" }]);
+  const [photos, setPhotos] = useState([]);
+  const [photoPreviews, setPhotoPreviews] = useState([]);
+  const fileInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  function handlePhotoChange(e) {
+    const files = Array.from(e.target.files || []);
+    const remaining = 5 - photos.length;
+    const toAdd = files.slice(0, remaining);
+    setPhotos((prev) => [...prev, ...toAdd]);
+    setPhotoPreviews((prev) => [...prev, ...toAdd.map((f) => URL.createObjectURL(f))]);
+    e.target.value = "";
+  }
+
+  function removePhoto(i) {
+    URL.revokeObjectURL(photoPreviews[i]);
+    setPhotos((prev) => prev.filter((_, idx) => idx !== i));
+    setPhotoPreviews((prev) => prev.filter((_, idx) => idx !== i));
+  }
 
   function setField(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -140,7 +158,7 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
     }
     setSaving(true);
     try {
-      await onSave({
+      const res = await client.post("/tickets", {
         ...form,
         assigned_to: form.assigned_to || null,
         priority: parseInt(form.priority, 10) || 1,
@@ -151,6 +169,22 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
           completed: false,
         })),
       });
+      const ticketId = res.data._id;
+      if (photos.length > 0) {
+        const fd = new FormData();
+        photos.forEach((p) => fd.append("photos", p));
+        try {
+          const photoRes = await client.post(`/tickets/${ticketId}/reference_photos`, fd);
+          if (form.assigned_to && photoRes.data.whatsapp_sent) {
+            toast.success("Reference photos sent to technician via WhatsApp.");
+          } else if (form.assigned_to && !photoRes.data.whatsapp_sent) {
+            toast.warning("Ticket created but WhatsApp delivery failed.");
+          }
+        } catch {
+          toast.warning("Ticket created but photo upload failed.");
+        }
+      }
+      onSave();
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to create ticket.");
       setSaving(false);
@@ -210,6 +244,48 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
           </div>
 
           <div style={{ marginTop: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <strong style={{ fontSize: 14 }}>Reference Photos</strong>
+              {photos.length < 5 && (
+                <button type="button" onClick={() => fileInputRef.current?.click()} style={modal.btnAdd}>
+                  + Add Photo
+                </button>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: "none" }}
+              onChange={handlePhotoChange}
+            />
+            {photoPreviews.length > 0 ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                {photoPreviews.map((src, i) => (
+                  <div key={i} style={{ position: "relative", width: 80, height: 80 }}>
+                    <img src={src} alt="" style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 6, border: "1px solid #ddd" }} />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(i)}
+                      style={{ position: "absolute", top: -6, right: -6, background: "#e53935", color: "#fff", border: "none", borderRadius: "50%", width: 18, height: 18, cursor: "pointer", fontSize: 11, lineHeight: "18px", padding: 0 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: 12, color: "#999", marginBottom: 12 }}>No photos attached (max 5).</p>
+            )}
+            {form.assigned_to && photos.length > 0 && (
+              <p style={{ fontSize: 12, color: "#2196f3", marginBottom: 10 }}>
+                📲 Will send {photos.length} photo{photos.length > 1 ? "s" : ""} to assigned technician via WhatsApp.
+              </p>
+            )}
+          </div>
+
+          <div style={{ marginTop: 4 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <strong style={{ fontSize: 14 }}>Steps</strong>
               <button type="button" onClick={addStep} style={modal.btnAdd}>+ Add Step</button>

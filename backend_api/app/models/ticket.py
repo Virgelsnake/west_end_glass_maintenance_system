@@ -27,6 +27,7 @@ class TicketBase(BaseModel):
     priority: int = Field(default=0, description="Higher = more urgent")
     due_date: Optional[datetime] = None
     category: Optional[TicketCategory] = None
+    reference_photos: List[str] = []  # filenames of admin-attached reference images
 
 
 class TicketCreate(TicketBase):

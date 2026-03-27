@@ -44,15 +44,28 @@ async def simulate_message(body: SimulateMessageRequest):
     message.  Runs ticket routing → Claude agent loop → saves all messages and
     audit log, then returns the bot's response text plus ticket context.
 
-    Does NOT call send_text_message — the CLI renders the response directly.
+    ALSO sends the response back to the user's WhatsApp number so they see it
+    on their phone in real-time (not just on screen).
     """
     db = get_db()
-    return await process_inbound_message(
+    result = await process_inbound_message(
         db=db,
         phone_number=body.phone_number,
         message_text=body.message_text,
         media_id=body.media_id,
     )
+    
+    # Send response back to WhatsApp (so user sees it on their phone)
+    try:
+        from ..services import whatsapp as wa_service
+        response_text = result.get("response_text", "")
+        if response_text:
+            await wa_service.send_text_message(body.phone_number, response_text)
+    except Exception as e:
+        # Log error but don't fail the response — user still sees it on screen
+        print(f"Warning: Failed to send response to WhatsApp: {e}")
+    
+    return result
 
 
 @router.post("/photo")
@@ -126,4 +139,76 @@ async def simulate_photo_upload(
     )
     
     return {"saved": True, "filename": filename}
+
+
+@router.post("/ref-photo")
+async def simulate_ref_photo_upload(
+    ticket_id: str,
+    phone_number: str,
+    photo: UploadFile = File(...),
+):
+    """
+    Simulate an admin attaching a reference photo to a ticket and 'sending' it via WhatsApp.
+
+    This endpoint is for CLI testing only — it mocks WhatsApp delivery (no real Meta API call).
+    Auth is the technician phone whitelist.
+    """
+    from fastapi import HTTPException
+    from ..auth import is_phone_authorized
+
+    db = get_db()
+
+    if not await is_phone_authorized(phone_number, db):
+        raise HTTPException(status_code=401, detail="Phone number not authorized")
+
+    if not ObjectId.is_valid(ticket_id):
+        raise HTTPException(status_code=400, detail="Invalid ticket ID")
+
+    ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    _MAX_REFERENCE_PHOTOS = 5
+    existing = ticket.get("reference_photos", [])
+    if len(existing) >= _MAX_REFERENCE_PHOTOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ticket already has {_MAX_REFERENCE_PHOTOS} reference photos",
+        )
+
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+    if photo.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Unsupported image type")
+
+    save_dir = os.path.join(settings.photo_storage_path, ticket_id)
+    os.makedirs(save_dir, exist_ok=True)
+    ext = os.path.splitext(photo.filename or "photo.jpg")[1] or ".jpg"
+    filename = f"ref_{len(existing)}_{int(datetime.utcnow().timestamp())}{ext}"
+    file_path = os.path.join(save_dir, filename)
+
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(photo.file, f)
+
+    await db.tickets.update_one(
+        {"_id": ObjectId(ticket_id)},
+        {"$push": {"reference_photos": filename}},
+    )
+
+    assigned_to = ticket.get("assigned_to")
+
+    await log_event(
+        db,
+        event="reference_photo_added",
+        actor=phone_number,
+        actor_type="technician",
+        ticket_id=ticket_id,
+        payload={"filename": filename, "whatsapp_simulated": True},
+    )
+
+    return {
+        "saved": True,
+        "filename": filename,
+        "whatsapp_simulated": True,
+        "would_send_to": assigned_to,
+    }
 

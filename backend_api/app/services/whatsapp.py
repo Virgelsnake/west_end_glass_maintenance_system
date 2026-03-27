@@ -62,3 +62,92 @@ async def download_media(media_id: str, ticket_id: str, step_index: int) -> str:
         f.write(content)
 
     return file_path
+
+
+async def upload_media(file_bytes: bytes, mime_type: str, filename: str = "photo.jpg") -> str:
+    """Upload a media file to WhatsApp and return its media_id."""
+    url = f"{WHATSAPP_API_BASE}/{settings.meta_phone_number_id}/media"
+    headers = {"Authorization": f"Bearer {settings.meta_whatsapp_token}"}
+    files = {
+        "file": (filename, file_bytes, mime_type),
+        "type": (None, mime_type),
+        "messaging_product": (None, "whatsapp"),
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, headers=headers, files=files)
+        resp.raise_for_status()
+        return resp.json()["id"]
+
+
+async def send_image_message(to: str, media_id: str, caption: str = "") -> dict:
+    """Send a WhatsApp image message using an already-uploaded media_id."""
+    url = f"{WHATSAPP_API_BASE}/{settings.meta_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {settings.meta_whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "image",
+        "image": {"id": media_id, "caption": caption},
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, json=payload, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def send_ticket_photo(to: str, file_path: str, caption: str = "") -> None:
+    """Read a local image file, upload it to WhatsApp, and send it to a recipient."""
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(file_path)
+    mime_type = mime_type or "image/jpeg"
+    with open(file_path, "rb") as f:
+        file_bytes = f.read()
+    filename = os.path.basename(file_path)
+    media_id = await upload_media(file_bytes, mime_type, filename)
+    await send_image_message(to=to, media_id=media_id, caption=caption)
+
+
+async def send_ticket_assignment_notification(
+    to: str,
+    tech_name: str,
+    ticket_title: str,
+    machine_id: str,
+) -> dict:
+    """
+    Notify a technician that a ticket has been assigned to them.
+    Uses the test_maintenance_chat template (4 params: name, datetime, title, machine_id).
+    """
+    from datetime import datetime
+    url = f"{WHATSAPP_API_BASE}/{settings.meta_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {settings.meta_whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    now = datetime.utcnow().strftime("%B %d, %Y at %I:%M %p UTC")
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": "test_maintenance_chat",
+            "language": {"code": "en_US"},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": tech_name},
+                        {"type": "text", "text": now},
+                        {"type": "text", "text": ticket_title},
+                        {"type": "text", "text": machine_id},
+                    ],
+                }
+            ],
+        },
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, json=payload, headers=headers)
+        resp.raise_for_status()
+        return resp.json()

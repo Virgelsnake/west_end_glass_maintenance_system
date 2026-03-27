@@ -105,6 +105,14 @@ app.include_router(tech_tickets.router)
 app.include_router(dashboard.router)
 
 
+@app.get("/settings/public", tags=["settings"])
+async def public_settings():
+    """Non-sensitive public config values needed by the frontend (no auth required)."""
+    return {
+        "whatsapp_business_number": settings.whatsapp_business_number,
+    }
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}

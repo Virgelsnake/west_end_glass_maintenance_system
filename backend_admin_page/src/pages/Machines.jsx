@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import client from "../api/client";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
-import { Plus, Search, MapPin, Hash, AlertCircle, Loader2, X } from "lucide-react";
+import { Plus, Search, MapPin, Copy, Check, AlertCircle, Loader2, X } from "lucide-react";
 
 export default function Machines() {
   const { role } = useAuth();
@@ -12,6 +12,13 @@ export default function Machines() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [waNumber, setWaNumber] = useState("");
+
+  useEffect(() => {
+    client.get("/settings/public").then((r) => {
+      if (r.data?.whatsapp_business_number) setWaNumber(r.data.whatsapp_business_number);
+    }).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -92,35 +99,9 @@ export default function Machines() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {filtered.map((m) => {
-            const openCount = ticketCounts[m.machine_id] || 0;
-            return (
-              <div
-                key={m.machine_id}
-                className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 flex flex-col gap-2 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between">
-                  <code className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                    {m.machine_id}
-                  </code>
-                  {openCount > 0 && (
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-                      {openCount} open
-                    </span>
-                  )}
-                </div>
-                <p className="font-semibold text-slate-900 text-sm">{m.name}</p>
-                {m.location && (
-                  <p className="flex items-center gap-1 text-xs text-slate-400">
-                    <MapPin size={11} /> {m.location}
-                  </p>
-                )}
-                {m.description && (
-                  <p className="text-xs text-slate-400 line-clamp-2">{m.description}</p>
-                )}
-              </div>
-            );
-          })}
+          {filtered.map((m) => (
+            <MachineCard key={m.machine_id} machine={m} openCount={ticketCounts[m.machine_id] || 0} waNumber={waNumber} />
+          ))}
           {filtered.length === 0 && (
             <p className="col-span-3 py-12 text-center text-sm text-slate-400">No machines found.</p>
           )}
@@ -128,6 +109,56 @@ export default function Machines() {
       )}
 
       {showAdd && <AddMachineModal onSave={handleAdd} onClose={() => setShowAdd(false)} />}
+    </div>
+  );
+}
+
+function MachineCard({ machine: m, openCount, waNumber }) {
+  const [copied, setCopied] = useState(false);
+  const waLink = waNumber
+    ? `https://wa.me/${waNumber}?text=${encodeURIComponent(m.machine_id)}`
+    : null;
+
+  function copyLink() {
+    if (!waLink) return;
+    navigator.clipboard.writeText(waLink).then(() => {
+      setCopied(true);
+      toast.success("WA link copied!");
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 flex flex-col gap-2 hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between">
+        <code className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+          {m.machine_id}
+        </code>
+        {openCount > 0 && (
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+            {openCount} open
+          </span>
+        )}
+      </div>
+      <p className="font-semibold text-slate-900 text-sm">{m.name}</p>
+      {m.location && (
+        <p className="flex items-center gap-1 text-xs text-slate-400">
+          <MapPin size={11} /> {m.location}
+        </p>
+      )}
+      {m.description && (
+        <p className="text-xs text-slate-400 line-clamp-2">{m.description}</p>
+      )}
+      {waLink && (
+        <button
+          onClick={copyLink}
+          className="mt-1 flex items-center gap-1.5 self-start rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 transition-colors"
+          title={waLink}
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? "Copied!" : "Copy WA Link"}
+        </button>
+      )}
     </div>
   );
 }

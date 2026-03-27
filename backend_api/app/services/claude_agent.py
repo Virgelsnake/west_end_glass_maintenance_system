@@ -27,6 +27,7 @@ Current ticket information:
 - Machine ID: {machine_id}
 - Ticket title: {title}
 - Technician name: {technician_name}
+- Technician phone: {technician_phone}
 
 Steps to complete:
 {steps_summary}
@@ -246,6 +247,7 @@ async def run_agent_loop(
         machine_id=ticket["machine_id"],
         title=ticket["title"],
         technician_name=technician_name,
+        technician_phone=user["phone_number"],
         steps_summary=_build_steps_summary(ticket.get("steps", [])),
         language=language,
     )
@@ -287,6 +289,7 @@ async def run_agent_loop(
             machine_id=ticket["machine_id"],
             title=ticket["title"],
             technician_name=technician_name,
+            technician_phone=user["phone_number"],
             steps_summary=_build_steps_summary(ticket.get("steps", [])),
             language=language,
         )

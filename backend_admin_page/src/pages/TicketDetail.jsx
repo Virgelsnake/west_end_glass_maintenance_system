@@ -280,7 +280,7 @@ export default function TicketDetail() {
               {tab === "messages" && (
                 <MessagesTab messages={messages} users={users} />
               )}
-              {tab === "photos" && <PhotosTab ticketId={id} />}
+              {tab === "photos" && <PhotosTab ticketId={id} ticket={ticket} />}
             </div>
           </div>
         </div>
@@ -404,43 +404,72 @@ function MessagesTab({ messages, users }) {
   );
 }
 
-function PhotosTab({ ticketId }) {
-  const [photos, setPhotos] = useState([]);
-  const [loading, setLoading] = useState(true);
+function PhotosTab({ ticketId, ticket }) {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-  useEffect(() => {
-    client
-      .get(`/tickets/${ticketId}/photos`)
-      .then((r) => setPhotos(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [ticketId]);
+  const refPhotos = (ticket?.reference_photos || []).map((filename) => ({
+    filename,
+    url: `${API_BASE}/tickets/${ticketId}/photos/${encodeURIComponent(filename)}`,
+  }));
 
-  if (loading)
-    return (
-      <div className="flex justify-center py-6">
-        <Loader2 size={22} className="animate-spin text-blue-600" />
-      </div>
-    );
-  if (!photos.length)
+  const stepPhotos = (ticket?.steps || [])
+    .filter((s) => s.photo_path)
+    .map((s) => ({
+      filename: s.photo_path,
+      label: s.label,
+      stepIndex: s.step_index,
+      url: `${API_BASE}/tickets/${ticketId}/photos/${encodeURIComponent(s.photo_path.split("/").pop())}`,
+    }));
+
+  if (!refPhotos.length && !stepPhotos.length)
     return <p className="text-sm text-slate-400">No photos attached.</p>;
+
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {photos.map((p, i) => (
-        <a
-          key={i}
-          href={p.url}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity"
-        >
-          <img
-            src={p.url}
-            alt={`Photo ${i + 1}`}
-            className="w-full h-28 object-cover"
-          />
-        </a>
-      ))}
+    <div className="space-y-6">
+      {refPhotos.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+            Reference Photos
+          </h4>
+          <div className="grid grid-cols-3 gap-3">
+            {refPhotos.map((p, i) => (
+              <a
+                key={i}
+                href={p.url}
+                target="_blank"
+                rel="noreferrer"
+                className="relative rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity"
+              >
+                <img src={p.url} alt={`Reference ${i + 1}`} className="w-full h-28 object-cover" />
+                <span className="absolute top-1 left-1 bg-blue-600 text-white text-xs font-bold px-1.5 py-0.5 rounded">
+                  REF
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+      {stepPhotos.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+            Step Photos
+          </h4>
+          <div className="grid grid-cols-3 gap-3">
+            {stepPhotos.map((p, i) => (
+              <a
+                key={i}
+                href={p.url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity block"
+              >
+                <img src={p.url} alt={`Step ${p.stepIndex}`} className="w-full h-28 object-cover" />
+                <div className="px-1.5 py-1 text-xs text-slate-500 truncate">{p.label}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
