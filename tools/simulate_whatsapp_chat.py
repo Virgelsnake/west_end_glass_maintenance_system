@@ -158,84 +158,6 @@ def send_message(api_url: str, phone_number: str, message_text: str) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Webcam photo capture (fun feature!)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def capture_photo_from_webcam(timeout_sec: int = 3) -> bytes | None:
-    """Try to capture a photo from the webcam. Returns image bytes or None if failed."""
-    try:
-        import cv2
-    except ImportError:
-        print("  ℹ️  OpenCV not installed. Skipping webcam capture.")
-        print("     To enable: pip install opencv-python\n")
-        return None
-    
-    try:
-        cap = cv2.VideoCapture(0)  # 0 = default camera
-        if not cap.isOpened():
-            print("  ⚠️  Webcam not available (or permissions denied)\n")
-            return None
-        
-        # Give camera a moment to warm up
-        for _ in range(5):
-            cap.read()
-        
-        # Capture frame
-        ret, frame = cap.read()
-        cap.release()
-        
-        if not ret or frame is None:
-            print("  ⚠️  Failed to capture from webcam\n")
-            return None
-        
-        # Encode as JPEG
-        success, encoded_image = cv2.imencode(".jpg", frame)
-        if not success:
-            return None
-        
-        print("  📸 Captured photo from webcam!")
-        return encoded_image.tobytes()
-    
-    except Exception as e:
-        print(f"  ⚠️  Webcam capture failed: {e}\n")
-        return None
-
-
-def upload_photo_to_ticket(
-    api_url: str,
-    ticket_id: str,
-    step_index: int,
-    photo_bytes: bytes,
-    phone_number: str,
-) -> bool:
-    """Upload a photo to a ticket step. Returns True if successful."""
-    try:
-        files = {"photo": ("photo.jpg", photo_bytes, "image/jpeg")}
-        params = {
-            "ticket_id": ticket_id,
-            "step_index": step_index,
-            "phone_number": phone_number,
-        }
-        resp = requests.post(
-            f"{api_url}/simulate/photo",
-            files=files,
-            params=params,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        print("  ✅ Photo uploaded and attached to step!")
-        return True
-    except requests.HTTPError as e:
-        print(f"  ❌ Failed to upload photo: {e.response.status_code}")
-        if e.response.text:
-            print(f"     {e.response.text}")
-        return False
-    except Exception as e:
-        print(f"  ⚠️  Upload error: {e}")
-        return False
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Display helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -333,12 +255,9 @@ def print_help() -> None:
     print("  │  4. Close the ticket when all steps are done:             │")
     print("  │     All work complete                                       │")
     print("  │                                                             │")
-    print("  │  5. Attach photos from webcam (for testing):               │")
-    print("  │     /test-photo 2     ← Captures real photo from webcam    │")
-    print("  │     Falls back to test mode if webcam unavailable          │")
-    print("  │                                                             │")
-    print("  │  6. Attach notes:                                           │")
-    print("  │     /test-note 2 Sealed all cracks                         │")
+    print("  │  5. Testing Only - Simulate photo/note:                    │")
+    print("  │     /test-photo 2     (mark step 2 as photo complete)      │")
+    print("  │     /test-note 2 Done (add note to step 2)                 │")
     print("  │                                                             │")
     print("  └─────────────────────────────────────────────────────────────┘")
     print()
@@ -391,10 +310,8 @@ def mode_1_chat_based(api_url: str, phone: str) -> None:
     print("  • Route to appropriate ticket")
     print("  • Let Claude guide the conversation")
     print("\n  Testing Commands:")
-    print("  • /test-photo [step #] — Capture photo from webcam & attach (or fallback to test)")
+    print("  • /test-photo [step #] — Simulate a photo upload (testing only)")
     print("  • /test-note [step #] [text] — Simulate a note (testing only)\n")
-
-    current_ticket_id = None
 
     while True:
         try:
@@ -414,42 +331,17 @@ def mode_1_chat_based(api_url: str, phone: str) -> None:
             print_help()
             continue
 
-        # Handle /test-photo specially - try to capture from webcam
+        # Handle test commands for photo/note simulation
+        message_to_send = raw
         if raw.startswith("/test-photo"):
-            if not current_ticket_id:
-                print("  ⚠️  No active ticket. Start a ticket first (send a machine ID).\n")
-                continue
-            
-            try:
-                step_str = raw.split()[-1]
-                step_index = int(step_str)
-            except (ValueError, IndexError):
-                print("  ❌ Usage: /test-photo [step_number]\n")
-                continue
-            
-            print("  🎥 Attempting to capture photo from webcam...\n")
-            photo_bytes = capture_photo_from_webcam()
-            
-            if photo_bytes:
-                if upload_photo_to_ticket(api_url, current_ticket_id, step_index, photo_bytes, phone):
-                    print()
-                    continue
-                else:
-                    print("  Falling back to test mode...\n")
-            
-            # Fallback to test command
             message_to_send = f"[TEST_PHOTO] {raw}"
-            print()
+            print("  ℹ️  Sending photo simulation command to backend...\n")
         elif raw.startswith("/test-note"):
             message_to_send = f"[TEST_NOTE] {raw}"
-            print("  ℹ️  Creating note in test mode...\n")
-        else:
-            message_to_send = raw
+            print("  ℹ️  Sending note simulation command to backend...\n")
 
         try:
             result = send_message(api_url, phone, message_to_send)
-            if result.get("ticket_id"):
-                current_ticket_id = result["ticket_id"]
             print_response(result)
         except requests.HTTPError as exc:
             print(f"\n  ❌ Error {exc.response.status_code}")
@@ -475,10 +367,8 @@ def mode_2_deeplink(api_url: str, phone: str) -> None:
     print("  Chat mode — type .help for commands\n")
 
     # Send initial machine ID message to start ticket
-    current_ticket_id = None
     try:
         result = send_message(api_url, phone, machine_id)
-        current_ticket_id = result.get("ticket_id")
         print_response(result)
     except requests.HTTPError as exc:
         print(f"\n  ❌ Error {exc.response.status_code}")
@@ -494,7 +384,7 @@ def mode_2_deeplink(api_url: str, phone: str) -> None:
     # Continue interactive session with that ticket
     print("  Continue chatting about the ticket:")
     print("  Testing Commands:")
-    print("  • /test-photo [step #] — Capture photo from webcam & attach (or fallback to test)")
+    print("  • /test-photo [step #] — Simulate a photo upload (testing only)")
     print("  • /test-note [step #] [text] — Simulate a note (testing only)\n")
 
     while True:
@@ -515,42 +405,17 @@ def mode_2_deeplink(api_url: str, phone: str) -> None:
             print_help()
             continue
 
-        # Handle /test-photo specially - try to capture from webcam
+        # Handle test commands for photo/note simulation
+        message_to_send = raw
         if raw.startswith("/test-photo"):
-            if not current_ticket_id:
-                print("  ⚠️  No active ticket found.\n")
-                continue
-            
-            try:
-                step_str = raw.split()[-1]
-                step_index = int(step_str)
-            except (ValueError, IndexError):
-                print("  ❌ Usage: /test-photo [step_number]\n")
-                continue
-            
-            print("  🎥 Attempting to capture photo from webcam...\n")
-            photo_bytes = capture_photo_from_webcam()
-            
-            if photo_bytes:
-                if upload_photo_to_ticket(api_url, current_ticket_id, step_index, photo_bytes, phone):
-                    print()
-                    continue
-                else:
-                    print("  Falling back to test mode...\n")
-            
-            # Fallback to test command
             message_to_send = f"[TEST_PHOTO] {raw}"
-            print()
+            print("  ℹ️  Sending photo simulation command to backend...\n")
         elif raw.startswith("/test-note"):
             message_to_send = f"[TEST_NOTE] {raw}"
-            print("  ℹ️  Creating note in test mode...\n")
-        else:
-            message_to_send = raw
+            print("  ℹ️  Sending note simulation command to backend...\n")
 
         try:
             result = send_message(api_url, phone, message_to_send)
-            if result.get("ticket_id"):
-                current_ticket_id = result["ticket_id"]
             print_response(result)
         except requests.HTTPError as exc:
             print(f"\n  ❌ Error {exc.response.status_code}")
