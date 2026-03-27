@@ -251,13 +251,13 @@ async def run_agent_loop(
     technician_name = user.get("name", "Technician")
 
     # ── Special handling for test commands (testing only) ───────────────
-    if message_text.startswith("[TEST_PHOTO]"):
-        # Extract step number from /test-photo [step #]
-        parts = message_text.split()
-        if len(parts) >= 3 and parts[1] == "/test-photo":
+    if message_text.strip().startswith("/test-photo"):
+        # Format: /test-photo [step_index]
+        parts = message_text.strip().split()
+        if len(parts) >= 2:
             try:
-                step_index = int(parts[2])
-                # Mark this step as complete
+                step_index = int(parts[1])
+                # Mark this step as complete with a simulated photo
                 await ticket_service.attach_photo_to_step(
                     db,
                     ticket_id,
@@ -265,17 +265,19 @@ async def run_agent_loop(
                     "[TEST_PHOTO_SIMULATED]",
                     user["phone_number"],
                 )
-                return f"✅ **Test Mode**: Simulated photo upload for step {step_index}. This is testing only and won't be saved in production."
+                return f"Test mode: Simulated photo for step {step_index}. Step marked complete."
             except (ValueError, IndexError):
-                return "❌ Invalid /test-photo command. Usage: /test-photo [step_number]"
+                return "Invalid /test-photo command. Usage: /test-photo [step_number]"
+        else:
+            return "Usage: /test-photo [step_number]"
 
-    elif message_text.startswith("[TEST_NOTE]"):
-        # Extract step number and note text from /test-note [step #] [text]
-        parts = message_text.split(maxsplit=3)
-        if len(parts) >= 4 and parts[1] == "/test-note":
+    elif message_text.strip().startswith("/test-note"):
+        # Format: /test-note [step_index] [note text...]
+        parts = message_text.strip().split(maxsplit=2)
+        if len(parts) >= 3:
             try:
-                step_index = int(parts[2])
-                note_text = " ".join(parts[3:])
+                step_index = int(parts[1])
+                note_text = parts[2]
                 # Attach note to step
                 await ticket_service.attach_note_to_step(
                     db,
@@ -284,9 +286,11 @@ async def run_agent_loop(
                     note_text,
                     user["phone_number"],
                 )
-                return f"✅ **Test Mode**: Saved note for step {step_index}: \"{note_text}\""
+                return f"Test mode: Note saved for step {step_index}: \"{note_text}\""
             except (ValueError, IndexError):
-                return "❌ Invalid /test-note command. Usage: /test-note [step_number] [note text]"
+                return "Invalid /test-note command. Usage: /test-note [step_number] [note text]"
+        else:
+            return "Usage: /test-note [step_number] [note text]"
 
     # ── Normal message processing ─────────────────────────────────────
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
