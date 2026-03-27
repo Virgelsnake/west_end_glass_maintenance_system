@@ -13,7 +13,7 @@ This CLI tool simulates WhatsApp messages through the complete bot pipeline:
   4. Message & audit log persistence
   5. Response display with ticket context
 
-Default technician: +15551234567 (John Smith)
+Default technician: +17692188324 (Joe Ronie)
 
 The bot is the primary interface for technicians in the field. You can test:
   • Ticket start (send "WEG-MACHINE-XXXX")
@@ -47,17 +47,17 @@ SYSTEM ARCHITECTURE (Three Interfaces)
 USAGE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Interactive (defaults to John Smith +15551234567):
+  Interactive (defaults to Joe Ronie +17692188324):
     python tools/simulate_chat.py
 
   Interactive (specify different technician phone):
-    python tools/simulate_chat.py --phone +15559876543
+    python tools/simulate_chat.py --phone +15551234567
 
   One-shot mode (send message and exit with default technician):
     python tools/simulate_chat.py --message "WEG-MACHINE-0042"
 
   One-shot mode (specify technician):
-    python tools/simulate_chat.py --phone +15559876543 --message "WEG-MACHINE-0042"
+    python tools/simulate_chat.py --phone +15551234567 --message "WEG-MACHINE-0042"
 
   Custom API endpoint:
     python tools/simulate_chat.py --api-url http://localhost:8001
@@ -235,6 +235,42 @@ def upload_photo_to_ticket(
         return False
 
 
+def upload_ref_photo_to_ticket(
+    api_url: str,
+    ticket_id: str,
+    photo_bytes: bytes,
+    phone_number: str,
+    filename: str = "ref_photo.jpg",
+) -> bool:
+    """Upload a reference photo to a ticket and mock WhatsApp delivery."""
+    try:
+        files = {"photo": (filename, photo_bytes, "image/jpeg")}
+        params = {"ticket_id": ticket_id, "phone_number": phone_number}
+        resp = requests.post(
+            f"{api_url}/simulate/ref-photo",
+            files=files,
+            params=params,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        print(f"  ✅ Reference photo saved: {data.get('filename')}")
+        assigned_to = data.get("would_send_to")
+        if assigned_to:
+            print(f"  📲 [WhatsApp SIMULATED] Would have sent to {assigned_to}")
+        else:
+            print("  ℹ️  No technician assigned — WhatsApp delivery skipped.")
+        return True
+    except requests.HTTPError as e:
+        print(f"  ❌ Failed to upload reference photo: {e.response.status_code}")
+        if e.response.text:
+            print(f"     {e.response.text}")
+        return False
+    except Exception as e:
+        print(f"  ⚠️  Upload error: {e}")
+        return False
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Display helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -316,6 +352,12 @@ def print_help() -> None:
     print("  │  .help           Show this message                          │")
     print("  │  .stats          Show recent ticket stats                   │")
     print("  │                                                             │")
+    print("  │  /test-photo [step#]         Capture from webcam & attach   │")
+    print("  │  /test-note [step#] [text]   Simulate a text note           │")
+    print("  │  /ref-photo [ticket_id]      Attach admin reference photo   │")
+    print("  │    → Tries webcam first; falls back to local file path      │")
+    print("  │    → Mocks WhatsApp: prints would-send info (no real call)  │")
+    print("  │                                                             │")
     print("  └─────────────────────────────────────────────────────────────┘")
     print()
     print("  ┌─ HOW TO USE ────────────────────────────────────────────────┐")
@@ -392,7 +434,8 @@ def mode_1_chat_based(api_url: str, phone: str) -> None:
     print("  • Let Claude guide the conversation")
     print("\n  Testing Commands:")
     print("  • /test-photo [step #] — Capture photo from webcam & attach (or fallback to test)")
-    print("  • /test-note [step #] [text] — Simulate a note (testing only)\n")
+    print("  • /test-note [step #] [text] — Simulate a note (testing only)")
+    print("  • /ref-photo [ticket_id] — Attach reference photo to any ticket (mocks WhatsApp)\n")
 
     current_ticket_id = None
 
@@ -440,6 +483,29 @@ def mode_1_chat_based(api_url: str, phone: str) -> None:
             # Fallback to test command
             message_to_send = f"[TEST_PHOTO] {raw}"
             print()
+        elif raw.startswith("/ref-photo"):
+            parts = raw.split()
+            ticket_id_arg = parts[1] if len(parts) > 1 else current_ticket_id
+            if not ticket_id_arg:
+                print("  ❌ Usage: /ref-photo [ticket_id]  (or have an active ticket)\n")
+                continue
+            print("  🎥 Attempting to capture reference photo from webcam...\n")
+            photo_bytes = capture_photo_from_webcam()
+            if not photo_bytes:
+                file_path = input("  Enter local image file path (or press Enter to cancel): ").strip()
+                if not file_path:
+                    print("  ❌ Cancelled.\n")
+                    continue
+                try:
+                    with open(file_path, "rb") as f:
+                        photo_bytes = f.read()
+                    print(f"  📁 Loaded from file: {file_path}")
+                except OSError as e:
+                    print(f"  ❌ Could not read file: {e}\n")
+                    continue
+            upload_ref_photo_to_ticket(api_url, ticket_id_arg, photo_bytes, phone)
+            print()
+            continue
         elif raw.startswith("/test-note"):
             message_to_send = f"[TEST_NOTE] {raw}"
             print("  ℹ️  Creating note in test mode...\n")
@@ -495,7 +561,8 @@ def mode_2_deeplink(api_url: str, phone: str) -> None:
     print("  Continue chatting about the ticket:")
     print("  Testing Commands:")
     print("  • /test-photo [step #] — Capture photo from webcam & attach (or fallback to test)")
-    print("  • /test-note [step #] [text] — Simulate a note (testing only)\n")
+    print("  • /test-note [step #] [text] — Simulate a note (testing only)")
+    print("  • /ref-photo [ticket_id] — Attach reference photo to a ticket (mocks WhatsApp)\n")
 
     while True:
         try:
@@ -541,6 +608,29 @@ def mode_2_deeplink(api_url: str, phone: str) -> None:
             # Fallback to test command
             message_to_send = f"[TEST_PHOTO] {raw}"
             print()
+        elif raw.startswith("/ref-photo"):
+            parts = raw.split()
+            ticket_id_arg = parts[1] if len(parts) > 1 else current_ticket_id
+            if not ticket_id_arg:
+                print("  ❌ Usage: /ref-photo [ticket_id]  (or have an active ticket)\n")
+                continue
+            print("  🎥 Attempting to capture reference photo from webcam...\n")
+            photo_bytes = capture_photo_from_webcam()
+            if not photo_bytes:
+                file_path = input("  Enter local image file path (or press Enter to cancel): ").strip()
+                if not file_path:
+                    print("  ❌ Cancelled.\n")
+                    continue
+                try:
+                    with open(file_path, "rb") as f:
+                        photo_bytes = f.read()
+                    print(f"  📁 Loaded from file: {file_path}")
+                except OSError as e:
+                    print(f"  ❌ Could not read file: {e}\n")
+                    continue
+            upload_ref_photo_to_ticket(api_url, ticket_id_arg, photo_bytes, phone)
+            print()
+            continue
         elif raw.startswith("/test-note"):
             message_to_send = f"[TEST_NOTE] {raw}"
             print("  ℹ️  Creating note in test mode...\n")
@@ -586,9 +676,9 @@ def main() -> None:
     # ── Pick or use provided phone number ────────────────────────
     phone = args.phone
     if not phone:
-        # Default to John Smith's phone number
-        phone = "+15551234567"
-        print(f"\n✓ Using default technician: +15551234567 (John Smith)")
+        # Default to Joe Ronie's phone number
+        phone = "+17692188324"
+        print(f"\n✓ Using default technician: +17692188324 (Joe Ronie)")
         print("  (Override with --phone +E.164 argument)")
     else:
         print(f"\n📱 Using specified phone: {phone}")

@@ -13,7 +13,7 @@ This CLI tool simulates WhatsApp messages through the complete bot pipeline:
   4. Message & audit log persistence
   5. Response display with ticket context
 
-Default technician: +15551234567 (John Smith)
+Default technician: +17692188324 (Joe Ronie)
 
 The bot is the primary interface for technicians in the field. You can test:
   • Ticket start (send "WEG-MACHINE-XXXX")
@@ -47,11 +47,11 @@ SYSTEM ARCHITECTURE (Three Interfaces)
 USAGE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Interactive (defaults to John Smith +15551234567):
+  Interactive (defaults to Joe Ronie +17692188324):
     python tools/simulate_chat.py
 
   Interactive (specify different technician phone):
-    python tools/simulate_chat.py --phone +15559876543
+    python tools/simulate_chat.py --phone +15551234567
 
   One-shot mode (send message and exit with default technician):
     python tools/simulate_chat.py --message "WEG-MACHINE-0042"
@@ -451,9 +451,9 @@ def main() -> None:
     # ── Pick or use provided phone number ────────────────────────
     phone = args.phone
     if not phone:
-        # Default to John Smith's phone number
-        phone = "+15551234567"
-        print(f"\n✓ Using default technician: +15551234567 (John Smith)")
+        # Default to Joe Ronie's phone number
+        phone = "+17692188324"
+        print(f"\n✓ Using default technician: +17692188324 (Joe Ronie)")
         print("  (Override with --phone +E.164 argument)")
     else:
         print(f"\n📱 Using specified phone: {phone}")
