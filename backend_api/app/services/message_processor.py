@@ -169,6 +169,44 @@ async def process_inbound_message(
         # Reframe the digit message so Claude knows this is a fresh selection
         message_text = f"I'm working on ticket {ticket_num}: {ticket.get('title', 'Untitled')}"
 
+    # 4b2. Show/list tickets request mid-ticket, or switch request
+    elif user.get("active_ticket_id") and any(
+        keyword in msg_upper for keyword in ["CHANGE", "SWITCH", "OTHER", "BACK", "DIFFERENT", "SHOW", "LIST", "WHAT TICKETS", "WHAT DO I HAVE"]
+    ):
+        machine_id = user.get("active_machine_id")
+        if machine_id:
+            tickets = await get_open_tickets_for_machine(db, machine_id)
+            await _set_user_context(db, phone_number, active_ticket_id=None)
+            if len(tickets) > 1:
+                ticket_list = "\n".join([
+                    f"{i+1}. {t['title']} (status: {t['status']})"
+                    for i, t in enumerate(tickets)
+                ])
+                return {
+                    "authorized": True,
+                    "response_text": (
+                        f"Tickets for {machine_id}:\n\n"
+                        f"{ticket_list}\n\n"
+                        "Reply with the number to switch, or continue with your current ticket."
+                    ),
+                    "ticket_id": None,
+                    "ticket_title": None,
+                    "ticket_status": None,
+                    "machine_id": machine_id,
+                    "assigned_to": phone_number,
+                }
+            else:
+                # Only one ticket
+                return {
+                    "authorized": True,
+                    "response_text": f"Only one ticket open for {machine_id}. Continue with it.",
+                    "ticket_id": None,
+                    "ticket_title": None,
+                    "ticket_status": None,
+                    "machine_id": machine_id,
+                    "assigned_to": phone_number,
+                }
+
     # 4c. Active ticket session — already picked or mid-flow
     if ticket is None and user.get("active_ticket_id"):
         tid = user["active_ticket_id"]
