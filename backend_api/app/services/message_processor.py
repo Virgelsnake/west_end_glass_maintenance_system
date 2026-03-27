@@ -166,6 +166,8 @@ async def process_inbound_message(
             }
         ticket = tickets[ticket_num - 1]
         await _set_user_context(db, phone_number, active_ticket_id=str(ticket["_id"]))
+        # Reframe the digit message so Claude knows this is a fresh selection
+        message_text = f"I'm working on ticket {ticket_num}: {ticket.get('title', 'Untitled')}"
 
     # 4c. Active ticket session — already picked or mid-flow
     if ticket is None and user.get("active_ticket_id"):
