@@ -14,48 +14,19 @@ Responsibilities:
 from datetime import datetime
 from typing import Optional
 
+from bson import ObjectId
 from .ticket_service import get_open_tickets_for_machine
 from .audit_service import log_event
 from . import claude_agent
 
 
-async def _check_ticket_selection(db, phone_number: str, message_text: str) -> Optional[dict]:
-    """
-    Check if this is a ticket selection response (single digit 1-9).
-    If yes, and the last message was a machine ID with multiple tickets, return the selected ticket.
-    Otherwise return None.
-    """
-    # Only process single digit responses
-    if not message_text.strip().isdigit() or len(message_text.strip()) > 2:
-        return None
-    
-    ticket_num = int(message_text.strip())
-    if ticket_num < 1 or ticket_num > 9:
-        return None
-    
-    # Get the last message from this user (from conversation history)
-    last_msg = await db.messages.find_one(
-        {"phone_number": phone_number, "direction": "inbound"},
-        sort=[("timestamp", -1)],
-        skip=1,  # Skip the current message
-    )
-    
-    if not last_msg or not last_msg.get("content"):
-        return None
-    
-    # Check if last message was a machine ID
-    if not last_msg["content"].upper().startswith("WEG-MACHINE-"):
-        return None
-    
-    machine_id = last_msg["content"].upper().strip()
-    tickets = await get_open_tickets_for_machine(db, machine_id)
-    
-    # Check if we have the requested ticket
-    if ticket_num > len(tickets):
-        return None
-    
-    # Return the selected ticket
-    return tickets[ticket_num - 1]
+async def _set_user_context(db, phone_number: str, **kwargs) -> None:
+    """Update user session context fields (active_machine_id, active_ticket_id, etc.)."""
+    if kwargs:
+        await db.users.update_one(
+            {"phone_number": phone_number},
+            {"$set": kwargs},
+        )
 
 
 async def process_inbound_message(
@@ -130,69 +101,107 @@ async def process_inbound_message(
         payload={"content": message_text or "[image]"},
     )
 
-    # ── 4. Route to ticket ────────────────────────────────────────
+    # ── 4. Route to ticket (state-driven session context) ─────────
     ticket = None
+    msg_upper = (message_text or "").upper().strip()
 
-    # First, check if this is a ticket selection response
-    selected_ticket = await _check_ticket_selection(db, phone_number, message_text)
-    if selected_ticket:
-        ticket = selected_ticket
-    elif message_text.upper().startswith("WEG-MACHINE-"):
-        machine_id = message_text.upper().strip()
+    # 4a. Machine ID scan — start or restart a machine session
+    if msg_upper.startswith("WEG-MACHINE-"):
+        machine_id = msg_upper
         tickets = await get_open_tickets_for_machine(db, machine_id)
         if not tickets:
+            await _set_user_context(db, phone_number, active_machine_id=machine_id, active_ticket_id=None)
             return {
                 "authorized": True,
-                "response_text": f"No open ticket found for {machine_id}.",
+                "response_text": f"No open tickets for {machine_id}.",
                 "ticket_id": None,
                 "ticket_title": None,
                 "ticket_status": None,
                 "machine_id": machine_id,
                 "assigned_to": phone_number,
             }
-        
-        # If multiple tickets, ask user to choose
-        if len(tickets) > 1:
+        if len(tickets) == 1:
+            ticket = tickets[0]
+            await _set_user_context(
+                db, phone_number,
+                active_machine_id=machine_id,
+                active_ticket_id=str(ticket["_id"]),
+            )
+        else:
+            # Multiple tickets — store machine context, wait for selection
+            await _set_user_context(db, phone_number, active_machine_id=machine_id, active_ticket_id=None)
             ticket_list = "\n".join([
-                f"{i+1}. {t['title']} (Status: {t['status']})"
+                f"{i+1}. {t['title']} (status: {t['status']})"
                 for i, t in enumerate(tickets)
             ])
             return {
                 "authorized": True,
-                "response_text": f"Found {len(tickets)} tickets for {machine_id}:\n\n{ticket_list}\n\nReply with the ticket number (1, 2, etc.) to choose which one to work on.",
+                "response_text": (
+                    f"Found {len(tickets)} tickets for {machine_id}:\n\n"
+                    f"{ticket_list}\n\n"
+                    "Reply with the number of the ticket to work on."
+                ),
                 "ticket_id": None,
                 "ticket_title": None,
                 "ticket_status": None,
                 "machine_id": machine_id,
                 "assigned_to": phone_number,
             }
-        
-        ticket = tickets[0]
-    else:
-        # Most recent in-progress ticket for this technician
-        ticket = await db.tickets.find_one(
-            {"assigned_to": phone_number, "status": "in_progress"},
-            sort=[("priority", -1), ("created_at", 1)],
-        )
-        if not ticket:
-            # Fall back to oldest open ticket
-            ticket = await db.tickets.find_one(
-                {"assigned_to": phone_number, "status": "open"},
-                sort=[("priority", -1), ("created_at", 1)],
-            )
-        if not ticket:
+
+    # 4b. Bare digit — selecting from a machine's open ticket list
+    elif msg_upper.isdigit() and user.get("active_machine_id") and not user.get("active_ticket_id"):
+        ticket_num = int(msg_upper)
+        machine_id = user["active_machine_id"]
+        tickets = await get_open_tickets_for_machine(db, machine_id)
+        if not tickets or ticket_num < 1 or ticket_num > len(tickets):
+            count = len(tickets) if tickets else 0
             return {
                 "authorized": True,
-                "response_text": (
-                    "No open tickets assigned to you. "
-                    "Tap an NFC tag or contact your administrator."
-                ),
+                "response_text": f"Invalid selection. Reply with a number between 1 and {count}.",
                 "ticket_id": None,
                 "ticket_title": None,
                 "ticket_status": None,
-                "machine_id": None,
+                "machine_id": machine_id,
                 "assigned_to": phone_number,
             }
+        ticket = tickets[ticket_num - 1]
+        await _set_user_context(db, phone_number, active_ticket_id=str(ticket["_id"]))
+
+    # 4c. Active ticket session — already picked or mid-flow
+    if ticket is None and user.get("active_ticket_id"):
+        tid = user["active_ticket_id"]
+        if ObjectId.is_valid(str(tid)):
+            ticket = await db.tickets.find_one({"_id": ObjectId(str(tid))})
+        if not ticket or ticket.get("status") == "closed":
+            # Stale context — clear it and fall through to 4d
+            await _set_user_context(db, phone_number, active_ticket_id=None)
+            ticket = None
+
+    # 4d. Fallback — oldest assigned open/in_progress ticket
+    if ticket is None:
+        ticket = await db.tickets.find_one(
+            {"assigned_to": phone_number, "status": {"$in": ["open", "in_progress"]}},
+            sort=[("priority", -1), ("created_at", 1)],
+        )
+        if ticket:
+            await _set_user_context(
+                db, phone_number,
+                active_machine_id=ticket.get("machine_id"),
+                active_ticket_id=str(ticket["_id"]),
+            )
+
+    if ticket is None:
+        return {
+            "authorized": True,
+            "response_text": (
+                "No active ticket. Scan an NFC tag or contact your administrator."
+            ),
+            "ticket_id": None,
+            "ticket_title": None,
+            "ticket_status": None,
+            "machine_id": None,
+            "assigned_to": phone_number,
+        }
 
     ticket_id = str(ticket["_id"])
 

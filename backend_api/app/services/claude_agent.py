@@ -12,6 +12,7 @@ The loop runs until Claude sends a final text response to the technician.
 import json
 from typing import Optional
 import anthropic
+from bson import ObjectId
 
 from ..config import settings
 from ..services import ticket_service, whatsapp as wa_service
@@ -19,28 +20,32 @@ from ..services.audit_service import log_event
 
 client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
-SYSTEM_PROMPT_TEMPLATE = """You are a helpful field service assistant for West End Glass.
+SYSTEM_PROMPT_TEMPLATE = """You are a field service assistant for West End Glass.
 You are guiding a field technician through a maintenance ticket via WhatsApp.
 
-Current ticket information:
+Current ticket:
 - Ticket ID: {ticket_id}
-- Machine ID: {machine_id}
-- Ticket title: {title}
-- Technician name: {technician_name}
-- Technician phone: {technician_phone}
+- Machine: {machine_id}
+- Title: {title}
+- Technician: {technician_name}
+- Phone: {technician_phone}
 
-Steps to complete:
+Steps:
 {steps_summary}
 
-Instructions:
+Rules:
 - Respond ONLY in {language}.
-- Be brief, clear, and friendly. This is a WhatsApp conversation.
-- Work through the steps ONE AT A TIME in order.
-- Do NOT skip steps or advance until the current step is satisfied.
-- When you check off a step, immediately tell the technician what they've completed and what comes next.
-- If the technician sends something unexpected, acknowledge it and re-present the current step.
-- When all steps are complete, prompt the technician to close the ticket by replying 'close'.
-- If the technician asks what tickets they have, call list_open_tickets.
+- Be professional and concise. Do not use emoji.
+- Work through steps one at a time, in order. Do not skip or reorder steps.
+- The moment a technician confirms a step is done, call check_off_step immediately before composing your reply.
+- For note steps, call attach_note using the technician's message as the note text.
+- For photo steps, call attach_photo when they send an image.
+- When all steps are complete, briefly confirm the work is done, then call close_ticket directly. Do not ask them to type a word or send a command.
+- After calling close_ticket, relay the remaining machine work exactly as the tool result states — nothing more.
+- If the technician sends a bare number (1, 2, 3...) while on an active step, they want to switch to a different ticket on this machine. Call switch_ticket with that number.
+- If the technician asks about their open tickets or what else they have to do, call list_open_tickets using phone number {technician_phone}.
+- You are scoped to machine {machine_id}. If they mention a different machine, tell them to scan that machine's NFC tag.
+- Keep responses to one or two sentences unless presenting a list.
 """
 
 AGENT_TOOLS = [
@@ -102,6 +107,17 @@ AGENT_TOOLS = [
                 "phone_number": {"type": "string"},
             },
             "required": ["phone_number"],
+        },
+    },
+    {
+        "name": "switch_ticket",
+        "description": "Switch to a different open ticket on the same machine. Call this when the technician sends a bare number or explicitly asks to switch tickets.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ticket_index": {"type": "integer", "description": "1-based ticket number from the machine's open ticket list"},
+            },
+            "required": ["ticket_index"],
         },
     },
 ]
@@ -174,8 +190,18 @@ async def _execute_tool(
             return f"Could not download photo (media_id: {tool_input['media_id']}). This may happen in test mode. Please try resending the photo or continue with the next step."
 
     elif tool_name == "close_ticket":
-        ticket = await ticket_service.close_ticket(db, tool_input["ticket_id"], phone_number)
-        return f"Ticket {tool_input['ticket_id']} closed successfully."
+        closed_ticket = await ticket_service.close_ticket(db, tool_input["ticket_id"], phone_number)
+        machine_id = closed_ticket.get("machine_id") if closed_ticket else None
+        if machine_id:
+            remaining = await ticket_service.get_open_tickets_for_machine(db, machine_id)
+            if remaining:
+                items = "\n".join(
+                    [f"{i+1}. {t['title']} (status: {t['status']})" for i, t in enumerate(remaining)]
+                )
+                return f"Ticket closed. {len(remaining)} ticket(s) still open on {machine_id}:\n{items}"
+            else:
+                return f"Ticket closed. No more open tickets for {machine_id}."
+        return "Ticket closed."
 
     elif tool_name == "list_open_tickets":
         tickets = await ticket_service.get_open_tickets_for_phone(db, tool_input["phone_number"])
@@ -183,6 +209,25 @@ async def _execute_tool(
             return "No open tickets found for this technician."
         lines = [f"- {t['machine_id']}: {t['title']}" for t in tickets]
         return "Open tickets:\n" + "\n".join(lines)
+
+    elif tool_name == "switch_ticket":
+        ticket_index = tool_input.get("ticket_index", 1)
+        user_doc = await db.users.find_one({"phone_number": phone_number})
+        machine_id = user_doc.get("active_machine_id") if user_doc else None
+        if not machine_id:
+            return "Cannot switch ticket: no active machine context. Ask the technician to scan the NFC tag."
+        tickets = await ticket_service.get_open_tickets_for_machine(db, machine_id)
+        if not tickets:
+            return f"No open tickets for {machine_id}."
+        if ticket_index < 1 or ticket_index > len(tickets):
+            return f"Invalid selection. There are {len(tickets)} open tickets on {machine_id}. Send a number between 1 and {len(tickets)}."
+        new_ticket = tickets[ticket_index - 1]
+        await db.users.update_one(
+            {"phone_number": phone_number},
+            {"$set": {"active_ticket_id": str(new_ticket["_id"])}},
+        )
+        steps_summary = _build_steps_summary(new_ticket.get("steps", []))
+        return f"Switched to: {new_ticket['title']} ({machine_id})\n\nSteps:\n{steps_summary}"
 
     return "Unknown tool."
 
@@ -282,8 +327,16 @@ async def run_agent_loop(
                 "content": result_text,
             })
 
-        # Reload the ticket so Claude has fresh step state
-        ticket = await db.tickets.find_one({"_id": ticket["_id"]})
+        # Reload ticket — respects switch_ticket changing active context
+        user_fresh = await db.users.find_one({"phone_number": user["phone_number"]})
+        new_tid = user_fresh.get("active_ticket_id") if user_fresh else None
+        if new_tid and ObjectId.is_valid(str(new_tid)):
+            refreshed = await db.tickets.find_one({"_id": ObjectId(str(new_tid))})
+            if refreshed:
+                ticket = refreshed
+                ticket_id = str(ticket["_id"])
+        else:
+            ticket = await db.tickets.find_one({"_id": ticket["_id"]})
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             ticket_id=ticket_id,
             machine_id=ticket["machine_id"],

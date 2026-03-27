@@ -117,6 +117,11 @@ async def close_ticket(db, ticket_id: str, closed_by: str) -> dict:
         {"$set": {"status": "closed", "closed_at": now, "closed_by": closed_by}},
     )
     ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
+    # Clear the technician's active ticket context so routing moves on
+    await db.users.update_one(
+        {"phone_number": closed_by},
+        {"$set": {"active_ticket_id": None}},
+    )
     await log_event(
         db,
         event="ticket_closed",
