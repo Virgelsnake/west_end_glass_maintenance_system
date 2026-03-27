@@ -15,7 +15,7 @@ def _serialize(doc) -> dict:
 @router.get("/{ticket_id}/messages")
 async def get_ticket_messages(
     ticket_id: str,
-    current_admin: str = Depends(get_current_admin)
+    current_admin: dict = Depends(get_current_admin)
 ):
     """Return full conversation thread for a ticket, chronological order."""
     db = get_db()
@@ -29,7 +29,7 @@ async def get_ticket_messages(
 async def send_message_from_admin(
     ticket_id: str,
     body: dict,
-    current_admin: str = Depends(get_current_admin)
+    current_admin: dict = Depends(get_current_admin)
 ):
     """Admin manually sends a WhatsApp message into a ticket conversation."""
     from ..services.whatsapp import send_text_message
@@ -59,7 +59,7 @@ async def send_message_from_admin(
         "ai_generated": False,
         "timestamp": datetime.utcnow(),
     })
-    await log_event(db, "message_sent", actor=current_admin, actor_type="admin",
+    await log_event(db, "message_sent", actor=current_admin["username"], actor_type="admin",
                     ticket_id=ticket_id, machine_id=ticket.get("machine_id"),
                     payload={"content": text})
     return {"sent": True}

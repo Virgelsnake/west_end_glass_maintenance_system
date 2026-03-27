@@ -3,6 +3,8 @@ from typing import Optional, List, Literal
 from datetime import datetime
 from .user import PyObjectId
 
+TicketCategory = Literal["repair", "installation", "maintenance", "emergency", "inspection"]
+
 
 class TicketStep(BaseModel):
     step_index: int
@@ -20,8 +22,11 @@ class TicketBase(BaseModel):
     title: str
     description: Optional[str] = None
     steps: List[TicketStep] = []
-    assigned_to: Optional[str] = None  # phone number
+    assigned_to: Optional[str] = None  # primary technician phone number
+    secondary_assigned_to: Optional[str] = None  # secondary technician phone number
     priority: int = Field(default=0, description="Higher = more urgent")
+    due_date: Optional[datetime] = None
+    category: Optional[TicketCategory] = None
 
 
 class TicketCreate(TicketBase):
@@ -33,7 +38,10 @@ class TicketUpdate(BaseModel):
     description: Optional[str] = None
     steps: Optional[List[TicketStep]] = None
     assigned_to: Optional[str] = None
+    secondary_assigned_to: Optional[str] = None
     priority: Optional[int] = None
+    due_date: Optional[datetime] = None
+    category: Optional[TicketCategory] = None
     status: Optional[Literal["open", "in_progress", "closed"]] = None
 
 

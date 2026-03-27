@@ -11,7 +11,7 @@ router = APIRouter(prefix="/tickets", tags=["photos"])
 async def get_photo(
     ticket_id: str,
     filename: str,
-    current_admin: str = Depends(get_current_admin),
+    current_admin: dict = Depends(get_current_admin),
 ):
     """Serve a stored photo file for a ticket step."""
     # Prevent path traversal

@@ -13,7 +13,9 @@ from .routers import (
     messages,
     audit,
     photos,
+    simulate,
 )
+from .routers import admins, tech_auth, tech_tickets, dashboard
 
 app = FastAPI(
     title="West End Glass Maintenance System API",
@@ -32,6 +34,25 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
+    import sys
+    
+    # Log loaded environment variables (truncated for security)
+    anthropic_key = settings.anthropic_api_key
+    meta_token = settings.meta_whatsapp_token
+    
+    anthropic_status = "❌ INVALID/PLACEHOLDER" if anthropic_key.startswith("your_") else f"✓ {anthropic_key[:15]}...{anthropic_key[-8:]}"
+    meta_status = "❌ INVALID/PLACEHOLDER" if meta_token.startswith("YOUR_") else f"✓ {meta_token[:15]}...{meta_token[-8:]}"
+    
+    print("\n" + "═" * 70, file=sys.stderr)
+    print("🔧 Environment Variables Loaded:", file=sys.stderr)
+    print(f"  MongoDB:      {settings.mongodb_url.replace('mongodb://', '').split(':')[0]}", file=sys.stderr)
+    print(f"  Meta Token:   {meta_status}", file=sys.stderr)
+    print(f"  Meta Phone:   {settings.meta_phone_number_id}", file=sys.stderr)
+    print(f"  Anthropic:    {anthropic_status}", file=sys.stderr)
+    print(f"  JWT Secret:   {settings.jwt_secret_key[:10]}...{settings.jwt_secret_key[-5:]}", file=sys.stderr)
+    print("═" * 70 + "\n", file=sys.stderr)
+    sys.stderr.flush()
+    
     await connect_db()
     await _seed_admin()
 
@@ -42,15 +63,31 @@ async def shutdown():
 
 
 async def _seed_admin():
-    """Create default admin account if none exists."""
+    """Create default super_admin account if no admins exist."""
     from .database import get_db
     db = get_db()
     existing = await db.admins.find_one({"username": settings.admin_username})
     if not existing:
         await db.admins.insert_one({
             "username": settings.admin_username,
+            "full_name": "System Administrator",
+            "role": "super_admin",
+            "active": True,
             "password_hash": hash_password(settings.admin_password),
+            "created_at": __import__("datetime").datetime.utcnow(),
+            "last_login": None,
         })
+    else:
+        # Backfill role/full_name for existing seeded admin that lacks them
+        updates = {}
+        if "role" not in existing:
+            updates["role"] = "super_admin"
+        if "full_name" not in existing:
+            updates["full_name"] = "System Administrator"
+        if "active" not in existing:
+            updates["active"] = True
+        if updates:
+            await db.admins.update_one({"username": settings.admin_username}, {"$set": updates})
 
 
 app.include_router(admin_auth.router)
@@ -61,6 +98,11 @@ app.include_router(machines.router)
 app.include_router(messages.router)
 app.include_router(audit.router)
 app.include_router(photos.router)
+app.include_router(simulate.router)
+app.include_router(admins.router)
+app.include_router(tech_auth.router)
+app.include_router(tech_tickets.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health")

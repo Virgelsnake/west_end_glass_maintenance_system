@@ -37,7 +37,7 @@ services:
     container_name: admin-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3030:3000"
     networks:
       - internal
 

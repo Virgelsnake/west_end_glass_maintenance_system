@@ -21,7 +21,7 @@ async def list_tickets(
     status: Optional[str] = None,
     machine_id: Optional[str] = None,
     assigned_to: Optional[str] = None,
-    current_admin: str = Depends(get_current_admin)
+    current_admin: dict = Depends(get_current_admin)
 ):
     db = get_db()
     query = {}
@@ -36,21 +36,21 @@ async def list_tickets(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_ticket(ticket: TicketCreate, current_admin: str = Depends(get_current_admin)):
+async def create_ticket(ticket: TicketCreate, current_admin: dict = Depends(get_current_admin)):
     db = get_db()
     doc = ticket.model_dump()
     doc["status"] = "open"
-    doc["created_by"] = current_admin
+    doc["created_by"] = current_admin["username"]
     doc["created_at"] = datetime.utcnow()
     result = await db.tickets.insert_one(doc)
     ticket_id = str(result.inserted_id)
-    await log_event(db, "ticket_created", actor=current_admin, actor_type="admin",
+    await log_event(db, "ticket_created", actor=current_admin["username"], actor_type="admin",
                     ticket_id=ticket_id, machine_id=ticket.machine_id)
     return {**doc, "_id": ticket_id}
 
 
 @router.get("/{ticket_id}")
-async def get_ticket(ticket_id: str, current_admin: str = Depends(get_current_admin)):
+async def get_ticket(ticket_id: str, current_admin: dict = Depends(get_current_admin)):
     db = get_db()
     if not ObjectId.is_valid(ticket_id):
         raise HTTPException(status_code=400, detail="Invalid ticket ID")
@@ -64,7 +64,7 @@ async def get_ticket(ticket_id: str, current_admin: str = Depends(get_current_ad
 async def update_ticket(
     ticket_id: str,
     update: TicketUpdate,
-    current_admin: str = Depends(get_current_admin)
+    current_admin: dict = Depends(get_current_admin)
 ):
     db = get_db()
     if not ObjectId.is_valid(ticket_id):
@@ -81,29 +81,29 @@ async def update_ticket(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Ticket not found")
     ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
-    await log_event(db, "ticket_updated", actor=current_admin, actor_type="admin",
+    await log_event(db, "ticket_updated", actor=current_admin["username"], actor_type="admin",
                     ticket_id=ticket_id, machine_id=ticket.get("machine_id"),
                     payload={"changes": list(changes.keys())})
     return {"updated": True}
 
 
 @router.post("/{ticket_id}/close")
-async def close_ticket_admin(ticket_id: str, current_admin: str = Depends(get_current_admin)):
+async def close_ticket_admin(ticket_id: str, current_admin: dict = Depends(get_current_admin)):
     db = get_db()
     if not ObjectId.is_valid(ticket_id):
         raise HTTPException(status_code=400, detail="Invalid ticket ID")
     await db.tickets.update_one(
         {"_id": ObjectId(ticket_id)},
-        {"$set": {"status": "closed", "closed_at": datetime.utcnow(), "closed_by": current_admin}}
+        {"$set": {"status": "closed", "closed_at": datetime.utcnow(), "closed_by": current_admin["username"]}}
     )
     ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
-    await log_event(db, "ticket_closed", actor=current_admin, actor_type="admin",
+    await log_event(db, "ticket_closed", actor=current_admin["username"], actor_type="admin",
                     ticket_id=ticket_id, machine_id=ticket.get("machine_id"))
     return {"closed": True}
 
 
 @router.post("/{ticket_id}/reopen")
-async def reopen_ticket(ticket_id: str, current_admin: str = Depends(get_current_admin)):
+async def reopen_ticket(ticket_id: str, current_admin: dict = Depends(get_current_admin)):
     db = get_db()
     if not ObjectId.is_valid(ticket_id):
         raise HTTPException(status_code=400, detail="Invalid ticket ID")
@@ -112,6 +112,6 @@ async def reopen_ticket(ticket_id: str, current_admin: str = Depends(get_current
         {"$set": {"status": "open", "closed_at": None, "closed_by": None}}
     )
     ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
-    await log_event(db, "ticket_reopened", actor=current_admin, actor_type="admin",
+    await log_event(db, "ticket_reopened", actor=current_admin["username"], actor_type="admin",
                     ticket_id=ticket_id, machine_id=ticket.get("machine_id"))
     return {"reopened": True}

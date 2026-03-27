@@ -2,12 +2,9 @@ import json
 from fastapi import APIRouter, Request, Response, HTTPException, Query
 from ..config import settings
 from ..database import get_db
-from ..auth import get_authorized_user
 from ..utils.webhook_verify import verify_webhook_signature
-from ..services import whatsapp as wa_service, claude_agent
-from ..services.ticket_service import get_open_tickets_for_machine
-from ..services.audit_service import log_event
-from datetime import datetime
+from ..services import whatsapp as wa_service
+from ..services.message_processor import process_inbound_message
 
 router = APIRouter(tags=["webhook"])
 
@@ -58,102 +55,17 @@ async def receive_webhook(request: Request):
             # Unsupported message type — ignore silently
             return {"status": "ok"}
 
-        # Authorize phone number
-        user = await get_authorized_user(phone_number, db)
-        if not user:
-            await log_event(db, "auth_failure", actor=phone_number, actor_type="technician",
-                            payload={"reason": "Phone number not in whitelist"})
-            await wa_service.send_text_message(
-                phone_number,
-                "Sorry, this number is not registered. Please contact your administrator."
-            )
-            return {"status": "ok"}
-
-        # Update last_activity
-        await db.users.update_one(
-            {"phone_number": phone_number},
-            {"$set": {"last_activity": datetime.utcnow()}}
-        )
-
-        # Log inbound message
-        await db.messages.insert_one({
-            "ticket_id": None,  # will update below if ticket found
-            "direction": "inbound",
-            "phone_number": phone_number,
-            "content": message_text or f"[image media_id={media_id}]",
-            "media_type": msg_type if msg_type != "text" else None,
-            "ai_generated": False,
-            "timestamp": datetime.utcnow(),
-        })
-        await log_event(db, "message_received", actor=phone_number, actor_type="technician",
-                        payload={"content": message_text or f"[image]"})
-
-        # Determine which ticket we're working on
-        # If message looks like a machine ID (e.g. WEG-MACHINE-XXXX), look up that machine
-        ticket = None
-        if message_text.upper().startswith("WEG-MACHINE-"):
-            machine_id = message_text.upper().strip()
-            tickets = await get_open_tickets_for_machine(db, machine_id)
-            if not tickets:
-                await wa_service.send_text_message(
-                    phone_number,
-                    f"No open ticket found for {machine_id}."
-                )
-                return {"status": "ok"}
-            ticket = tickets[0]
-        else:
-            # Find the most recent in-progress ticket for this technician
-            ticket = await db.tickets.find_one(
-                {"assigned_to": phone_number, "status": "in_progress"},
-                sort=[("priority", -1), ("created_at", 1)]
-            )
-            if not ticket:
-                # Fall back to any open ticket assigned to them
-                ticket = await db.tickets.find_one(
-                    {"assigned_to": phone_number, "status": "open"},
-                    sort=[("priority", -1), ("created_at", 1)]
-                )
-            if not ticket:
-                await wa_service.send_text_message(
-                    phone_number,
-                    "No open tickets assigned to you. Tap an NFC tag or contact your administrator."
-                )
-                return {"status": "ok"}
-
-        ticket_id = str(ticket["_id"])
-
-        # Load conversation history for this ticket
-        history_cursor = db.messages.find(
-            {"ticket_id": ticket_id}
-        ).sort("timestamp", 1)
-        conversation_history = await history_cursor.to_list(length=200)
-
-        # Run Claude agentic loop
-        response_text = await claude_agent.run_agent_loop(
+        # Run the shared processing pipeline
+        result = await process_inbound_message(
             db=db,
-            ticket=ticket,
-            user=user,
+            phone_number=phone_number,
             message_text=message_text,
             media_id=media_id,
-            conversation_history=conversation_history,
+            msg_type=msg_type,
         )
 
-        # Send response to technician
-        await wa_service.send_text_message(phone_number, response_text)
-
-        # Log outbound message
-        await db.messages.insert_one({
-            "ticket_id": ticket_id,
-            "direction": "outbound",
-            "phone_number": phone_number,
-            "content": response_text,
-            "ai_generated": True,
-            "timestamp": datetime.utcnow(),
-        })
-        await log_event(db, "message_sent", actor="system", actor_type="system",
-                        ticket_id=ticket_id,
-                        machine_id=ticket.get("machine_id"),
-                        payload={"content": response_text[:200]})
+        # Deliver the response via WhatsApp
+        await wa_service.send_text_message(phone_number, result["response_text"])
 
     except Exception as e:
         # Never return a non-200 to Meta or it will retry endlessly

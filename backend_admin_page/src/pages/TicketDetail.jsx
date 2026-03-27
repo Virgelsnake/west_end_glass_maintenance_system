@@ -1,112 +1,446 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useCallback, useEffect } from "react";
+import { useParams, Link } from "react-router-dom";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import client from "../api/client";
-import StepList from "../components/StepList";
-import ConversationView from "../components/ConversationView";
-import PhotoGallery from "../components/PhotoGallery";
+import { toast } from "sonner";
+import {
+  ArrowLeft, CheckCircle2, Circle, AlertCircle, Loader2,
+  MessageSquare, ImageIcon, ListTodo, Clock, User, Tag,
+  ChevronDown,
+} from "lucide-react";
+import { format, formatDistanceToNow, isPast } from "date-fns";
+
+const STATUS_OPTIONS = ["open", "in_progress", "closed"];
+const STATUS_STYLES = {
+  open: "bg-red-100 text-red-700",
+  in_progress: "bg-amber-100 text-amber-700",
+  closed: "bg-emerald-100 text-emerald-700",
+};
+const CATEGORY_STYLES = {
+  repair: "bg-orange-100 text-orange-700",
+  installation: "bg-blue-100 text-blue-700",
+  maintenance: "bg-slate-100 text-slate-600",
+  emergency: "bg-red-100 text-red-800",
+  inspection: "bg-purple-100 text-purple-700",
+};
 
 export default function TicketDetail() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const [ticket, setTicket] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("steps");
-  const [sendText, setSendText] = useState("");
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
 
-  useEffect(() => {
-    loadTicket();
-    loadMessages();
+  const load = useCallback(async () => {
+    try {
+      const [tRes, mRes, uRes] = await Promise.all([
+        client.get(`/tickets/${id}`),
+        client.get(`/tickets/${id}/messages`).catch(() => ({ data: [] })),
+        client.get("/users?active=true").catch(() => ({ data: [] })),
+      ]);
+      setTicket(tRes.data);
+      setMessages(mRes.data);
+      setUsers(uRes.data);
+    } catch {
+      toast.error("Failed to load ticket");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  async function loadTicket() {
-    const res = await client.get(`/tickets/${id}`);
-    setTicket(res.data);
+  useAutoRefresh(load, 30000);
+
+  async function updateStatus(newStatus) {
+    setUpdatingStatus(true);
+    setShowStatusMenu(false);
+    try {
+      await client.patch(`/tickets/${id}`, { status: newStatus });
+      toast.success("Status updated");
+      load();
+    } catch {
+      toast.error("Failed to update status");
+    } finally {
+      setUpdatingStatus(false);
+    }
   }
 
-  async function loadMessages() {
-    const res = await client.get(`/tickets/${id}/messages`);
-    setMessages(res.data);
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 size={28} className="animate-spin text-blue-600" />
+      </div>
+    );
+  }
+  if (!ticket) {
+    return (
+      <div className="p-8 text-center text-slate-500">
+        Ticket not found.{" "}
+        <Link to="/tickets" className="text-blue-600 underline">
+          Back to Tickets
+        </Link>
+      </div>
+    );
   }
 
-  async function handleClose() {
-    await client.post(`/tickets/${id}/close`);
-    loadTicket();
-  }
-
-  async function handleReopen() {
-    await client.post(`/tickets/${id}/reopen`);
-    loadTicket();
-  }
-
-  async function handleSend(e) {
-    e.preventDefault();
-    if (!sendText.trim()) return;
-    await client.post(`/tickets/${id}/messages`, { text: sendText });
-    setSendText("");
-    loadMessages();
-  }
-
-  if (!ticket) return <div style={{ padding: 32 }}>Loading...</div>;
+  const assignedUser = users.find((u) => u.phone_number === ticket.assigned_to);
+  const secondaryUser = users.find(
+    (u) => u.phone_number === ticket.secondary_assigned_to
+  );
+  const completedSteps = (ticket.steps || []).filter((s) => s.completed).length;
+  const totalSteps = (ticket.steps || []).length;
+  const progressPct =
+    totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+  const isOverdue =
+    ticket.due_date &&
+    ticket.status !== "closed" &&
+    isPast(new Date(ticket.due_date));
 
   return (
-    <div style={styles.page}>
-      <button onClick={() => navigate("/tickets")} style={styles.back}>← Back</button>
-      <div style={styles.header}>
+    <div className="p-6 space-y-5">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <Link to="/tickets" className="flex items-center gap-1 hover:text-blue-600">
+          <ArrowLeft size={14} /> Tickets
+        </Link>
+        <span>/</span>
+        <span className="font-medium text-slate-900 truncate max-w-xs">
+          {ticket.title}
+        </span>
+      </div>
+
+      {/* Title row */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 style={{ margin: 0 }}>{ticket.title}</h2>
-          <p style={styles.sub}>Machine: {ticket.machine_id} · Assigned: {ticket.assigned_to || "Unassigned"}</p>
+          <h1 className="text-xl font-bold text-slate-900">{ticket.title}</h1>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <code className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+              {ticket.machine_id}
+            </code>
+            {ticket.category && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                  CATEGORY_STYLES[ticket.category] || "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {ticket.category}
+              </span>
+            )}
+            <PriorityBadge priority={ticket.priority} />
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {ticket.status !== "closed" ? (
-            <button style={styles.btnRed} onClick={handleClose}>Close Ticket</button>
-          ) : (
-            <button style={styles.btnGreen} onClick={handleReopen}>Reopen Ticket</button>
+
+        {/* Status selector */}
+        <div className="relative">
+          <button
+            onClick={() => setShowStatusMenu((v) => !v)}
+            disabled={updatingStatus}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-opacity ${
+              STATUS_STYLES[ticket.status]
+            } ${updatingStatus ? "opacity-60" : ""}`}
+          >
+            {updatingStatus && (
+              <Loader2 size={13} className="animate-spin" />
+            )}
+            {ticket.status
+              ?.replace("_", " ")
+              .replace(/\b\w/g, (c) => c.toUpperCase())}
+            <ChevronDown size={13} />
+          </button>
+          {showStatusMenu && (
+            <div className="absolute right-0 top-full mt-1 z-10 min-w-[140px] rounded-lg border border-slate-200 bg-white shadow-lg py-1">
+              {STATUS_OPTIONS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => updateStatus(s)}
+                  className={`flex w-full items-center px-3 py-2 text-sm capitalize hover:bg-slate-50 ${
+                    ticket.status === s ? "font-semibold text-blue-600" : "text-slate-700"
+                  }`}
+                >
+                  {s.replace("_", " ")}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      <div style={styles.tabs}>
-        {["steps", "conversation", "photos"].map((t) => (
-          <button key={t} style={tab === t ? styles.tabActive : styles.tab} onClick={() => setTab(t)}>
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </div>
+      {/* 2-col layout */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Meta sidebar */}
+        <div className="md:col-span-1 rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-3 text-sm">
+          <InfoRow
+            icon={<User size={14} />}
+            label="Primary Tech"
+            value={assignedUser?.name || ticket.assigned_to || "Unassigned"}
+          />
+          {secondaryUser && (
+            <InfoRow
+              icon={<User size={14} />}
+              label="Secondary Tech"
+              value={secondaryUser.name || ticket.secondary_assigned_to}
+            />
+          )}
+          <InfoRow
+            icon={<Clock size={14} />}
+            label="Due Date"
+            value={
+              ticket.due_date ? (
+                <span
+                  className={
+                    isOverdue
+                      ? "text-red-600 font-semibold"
+                      : "text-slate-700"
+                  }
+                >
+                  {isOverdue && (
+                    <AlertCircle size={12} className="inline mr-1" />
+                  )}
+                  {format(new Date(ticket.due_date), "MMM d, yyyy")}
+                </span>
+              ) : (
+                "—"
+              )
+            }
+          />
+          <InfoRow
+            icon={<ListTodo size={14} />}
+            label="Steps"
+            value={`${completedSteps} / ${totalSteps} complete`}
+          />
+          <InfoRow
+            icon={<Tag size={14} />}
+            label="Created"
+            value={
+              ticket.created_at
+                ? formatDistanceToNow(new Date(ticket.created_at), {
+                    addSuffix: true,
+                  })
+                : "—"
+            }
+          />
+          {ticket.description && (
+            <div className="pt-2 border-t border-slate-100 text-xs text-slate-500 leading-relaxed">
+              {ticket.description}
+            </div>
+          )}
+        </div>
 
-      <div style={styles.body}>
-        {tab === "steps" && <StepList steps={ticket.steps} />}
-        {tab === "conversation" && (
-          <>
-            <ConversationView messages={messages} />
-            <form onSubmit={handleSend} style={styles.sendForm}>
-              <input
-                style={styles.sendInput}
-                placeholder="Send a message as admin..."
-                value={sendText}
-                onChange={(e) => setSendText(e.target.value)}
-              />
-              <button style={styles.sendBtn} type="submit">Send</button>
-            </form>
-          </>
-        )}
-        {tab === "photos" && <PhotoGallery ticketId={id} steps={ticket.steps} />}
+        {/* Main panel */}
+        <div className="md:col-span-2 space-y-4">
+          {totalSteps > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4">
+              <div className="flex justify-between text-xs text-slate-500 mb-2">
+                <span>
+                  {completedSteps} of {totalSteps} steps complete
+                </span>
+                <span className="font-semibold text-slate-700">
+                  {progressPct}%
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className={`h-2 rounded-full transition-all duration-500 ${
+                    progressPct === 100 ? "bg-emerald-500" : "bg-blue-600"
+                  }`}
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex border-b border-slate-100">
+              {[
+                { key: "steps", icon: <ListTodo size={14} />, label: "Steps" },
+                {
+                  key: "messages",
+                  icon: <MessageSquare size={14} />,
+                  label: `Messages (${messages.length})`,
+                },
+                { key: "photos", icon: <ImageIcon size={14} />, label: "Photos" },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium transition-colors ${
+                    tab === t.key
+                      ? "border-b-2 border-blue-600 text-blue-600"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="p-5">
+              {tab === "steps" && <StepsTab steps={ticket.steps || []} />}
+              {tab === "messages" && (
+                <MessagesTab messages={messages} users={users} />
+              )}
+              {tab === "photos" && <PhotosTab ticketId={id} />}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-const styles = {
-  page: { padding: 32 },
-  back: { background: "none", border: "none", color: "#1976d2", cursor: "pointer", fontSize: 14, marginBottom: 12 },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
-  sub: { color: "#888", margin: "4px 0 0" },
-  tabs: { display: "flex", gap: 4, marginBottom: 20 },
-  tab: { padding: "8px 16px", border: "1px solid #ddd", borderRadius: 4, background: "#fff", cursor: "pointer" },
-  tabActive: { padding: "8px 16px", border: "none", borderRadius: 4, background: "#1a1a2e", color: "#fff", cursor: "pointer" },
-  body: { background: "#fff", borderRadius: 8, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,.08)" },
-  btnRed: { background: "#e57373", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 4, cursor: "pointer", fontWeight: "bold" },
-  btnGreen: { background: "#81c784", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 4, cursor: "pointer", fontWeight: "bold" },
-  sendForm: { display: "flex", gap: 8, marginTop: 12 },
-  sendInput: { flex: 1, padding: "8px 12px", border: "1px solid #ddd", borderRadius: 4 },
-  sendBtn: { background: "#1a1a2e", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 4, cursor: "pointer" },
-};
+function InfoRow({ icon, label, value }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="mt-0.5 flex-shrink-0 text-slate-400">{icon}</span>
+      <div>
+        <div className="text-xs text-slate-400">{label}</div>
+        <div className="text-slate-700">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function PriorityBadge({ priority }) {
+  const p = parseInt(priority, 10);
+  if (p >= 8)
+    return (
+      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+        P{p} HIGH
+      </span>
+    );
+  if (p >= 5)
+    return (
+      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
+        P{p} MED
+      </span>
+    );
+  return (
+    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+      P{p}
+    </span>
+  );
+}
+
+function StepsTab({ steps }) {
+  if (!steps.length)
+    return <p className="text-sm text-slate-400">No steps defined.</p>;
+  return (
+    <ol className="space-y-3">
+      {steps.map((step, i) => (
+        <li key={i} className="flex items-start gap-3">
+          {step.completed ? (
+            <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0 mt-0.5" />
+          ) : (
+            <Circle size={18} className="text-slate-300 flex-shrink-0 mt-0.5" />
+          )}
+          <div className="flex-1">
+            <p
+              className={`text-sm ${
+                step.completed ? "line-through text-slate-400" : "text-slate-700"
+              }`}
+            >
+              {step.label}
+            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-slate-400 capitalize">
+                {step.completion_type?.replace("_", " ")}
+              </span>
+              {step.note && (
+                <span className="text-xs text-blue-600 italic">
+                  &ldquo;{step.note}&rdquo;
+                </span>
+              )}
+            </div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function MessagesTab({ messages, users }) {
+  if (!messages.length)
+    return <p className="text-sm text-slate-400">No messages yet.</p>;
+  return (
+    <div className="space-y-3">
+      {messages.map((msg) => {
+        const u = users.find((u) => u.phone_number === msg.sender);
+        const initials = u?.name?.[0]?.toUpperCase() || "?";
+        return (
+          <div
+            key={msg._id}
+            className={`flex gap-2 ${
+              msg.direction === "outbound" ? "flex-row-reverse" : ""
+            }`}
+          >
+            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-600">
+              {initials}
+            </div>
+            <div
+              className={`max-w-sm rounded-2xl px-3 py-2 text-sm ${
+                msg.direction === "outbound"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-100 text-slate-800"
+              }`}
+            >
+              <p>{msg.content}</p>
+              <p
+                className={`text-xs mt-1 ${
+                  msg.direction === "outbound"
+                    ? "text-blue-200"
+                    : "text-slate-400"
+                }`}
+              >
+                {formatDistanceToNow(new Date(msg.timestamp), {
+                  addSuffix: true,
+                })}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PhotosTab({ ticketId }) {
+  const [photos, setPhotos] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    client
+      .get(`/tickets/${ticketId}/photos`)
+      .then((r) => setPhotos(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [ticketId]);
+
+  if (loading)
+    return (
+      <div className="flex justify-center py-6">
+        <Loader2 size={22} className="animate-spin text-blue-600" />
+      </div>
+    );
+  if (!photos.length)
+    return <p className="text-sm text-slate-400">No photos attached.</p>;
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      {photos.map((p, i) => (
+        <a
+          key={i}
+          href={p.url}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity"
+        >
+          <img
+            src={p.url}
+            alt={`Photo ${i + 1}`}
+            className="w-full h-28 object-cover"
+          />
+        </a>
+      ))}
+    </div>
+  );
+}

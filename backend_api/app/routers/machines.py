@@ -15,14 +15,14 @@ def _serialize(doc) -> dict:
 
 
 @router.get("")
-async def list_machines(current_admin: str = Depends(get_current_admin)):
+async def list_machines(current_admin: dict = Depends(get_current_admin)):
     db = get_db()
     machines = await db.machines.find().to_list(length=None)
     return [_serialize(m) for m in machines]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_machine(machine: MachineCreate, current_admin: str = Depends(get_current_admin)):
+async def create_machine(machine: MachineCreate, current_admin: dict = Depends(get_current_admin)):
     db = get_db()
     existing = await db.machines.find_one({"machine_id": machine.machine_id})
     if existing:
@@ -34,7 +34,7 @@ async def create_machine(machine: MachineCreate, current_admin: str = Depends(ge
 
 
 @router.get("/{machine_id}")
-async def get_machine(machine_id: str, current_admin: str = Depends(get_current_admin)):
+async def get_machine(machine_id: str, current_admin: dict = Depends(get_current_admin)):
     db = get_db()
     machine = await db.machines.find_one({"machine_id": machine_id})
     if not machine:
@@ -46,7 +46,7 @@ async def get_machine(machine_id: str, current_admin: str = Depends(get_current_
 async def update_machine(
     machine_id: str,
     update: MachineUpdate,
-    current_admin: str = Depends(get_current_admin)
+    current_admin: dict = Depends(get_current_admin)
 ):
     db = get_db()
     changes = {k: v for k, v in update.model_dump().items() if v is not None}

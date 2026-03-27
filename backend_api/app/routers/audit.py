@@ -20,7 +20,7 @@ async def get_audit_logs(
     event: Optional[str] = None,
     limit: int = 100,
     skip: int = 0,
-    current_admin: str = Depends(get_current_admin),
+    current_admin: dict = Depends(get_current_admin),
 ):
     """Return audit log entries with optional filters. Most recent first."""
     db = get_db()

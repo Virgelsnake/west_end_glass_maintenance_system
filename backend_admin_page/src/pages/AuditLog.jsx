@@ -1,73 +1,136 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback } from "react";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import client from "../api/client";
+import { Search, Filter, RefreshCw } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 
-const EVENT_TYPES = [
-  "", "ticket_created", "ticket_updated", "ticket_closed", "ticket_reopened",
-  "message_received", "message_sent", "note_added", "photo_attached",
-  "step_completed", "user_added", "user_deactivated", "auth_failure"
-];
+const EVENT_COLORS = {
+  ticket_created: "bg-blue-100 text-blue-700",
+  ticket_updated: "bg-amber-100 text-amber-700",
+  ticket_closed: "bg-emerald-100 text-emerald-700",
+  step_completed: "bg-purple-100 text-purple-700",
+  user_added: "bg-teal-100 text-teal-700",
+  login: "bg-slate-100 text-slate-600",
+};
 
 export default function AuditLog() {
   const [logs, setLogs] = useState([]);
-  const [filters, setFilters] = useState({ event: "", actor: "", machine_id: "", ticket_id: "" });
-  const [skip, setSkip] = useState(0);
-  const LIMIT = 50;
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [eventFilter, setEventFilter] = useState("");
 
-  useEffect(() => { load(0); }, [filters]);
+  const load = useCallback(async () => {
+    try {
+      const res = await client.get("/audit?limit=200");
+      setLogs(res.data);
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  async function load(newSkip = 0) {
-    const params = new URLSearchParams({ limit: LIMIT, skip: newSkip });
-    Object.entries(filters).forEach(([k, v]) => { if (v) params.append(k, v); });
-    const res = await client.get(`/audit?${params}`);
-    setLogs(res.data);
-    setSkip(newSkip);
-  }
+  useAutoRefresh(load, 30000);
+
+  const eventTypes = [...new Set(logs.map((l) => l.event))].sort();
+
+  const filtered = logs.filter((l) => {
+    const matchEvent = !eventFilter || l.event === eventFilter;
+    const q = search.toLowerCase();
+    const matchQ =
+      !q ||
+      l.actor?.toLowerCase().includes(q) ||
+      l.event?.toLowerCase().includes(q) ||
+      JSON.stringify(l.details || {}).toLowerCase().includes(q);
+    return matchEvent && matchQ;
+  });
 
   return (
-    <div style={styles.page}>
-      <h2>Audit Log</h2>
-      <div style={styles.filters}>
-        <select style={styles.select} value={filters.event} onChange={(e) => setFilters({ ...filters, event: e.target.value })}>
-          {EVENT_TYPES.map((t) => <option key={t} value={t}>{t || "All Events"}</option>)}
-        </select>
-        <input style={styles.input} placeholder="Actor (phone or admin)" value={filters.actor} onChange={(e) => setFilters({ ...filters, actor: e.target.value })} />
-        <input style={styles.input} placeholder="Machine ID" value={filters.machine_id} onChange={(e) => setFilters({ ...filters, machine_id: e.target.value })} />
-        <input style={styles.input} placeholder="Ticket ID" value={filters.ticket_id} onChange={(e) => setFilters({ ...filters, ticket_id: e.target.value })} />
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Audit Log</h1>
+          <p className="text-sm text-slate-500">{filtered.length} events</p>
+        </div>
+        <button onClick={load} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
+          <RefreshCw size={13} /> Refresh
+        </button>
       </div>
-      <table style={styles.table}>
-        <thead>
-          <tr>{["Timestamp", "Event", "Actor", "Machine", "Ticket", "Payload"].map((h) => <th key={h} style={styles.th}>{h}</th>)}</tr>
-        </thead>
-        <tbody>
-          {logs.map((log) => (
-            <tr key={log._id}>
-              <td style={styles.td}>{new Date(log.timestamp).toLocaleString()}</td>
-              <td style={styles.td}><code>{log.event}</code></td>
-              <td style={styles.td}>{log.actor || "—"}</td>
-              <td style={styles.td}>{log.machine_id || "—"}</td>
-              <td style={styles.td}>{log.ticket_id ? log.ticket_id.slice(-6) : "—"}</td>
-              <td style={styles.td}><pre style={styles.pre}>{JSON.stringify(log.payload, null, 1)}</pre></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={styles.pagination}>
-        <button disabled={skip === 0} onClick={() => load(Math.max(0, skip - LIMIT))} style={styles.pgBtn}>← Prev</button>
-        <button disabled={logs.length < LIMIT} onClick={() => load(skip + LIMIT)} style={styles.pgBtn}>Next →</button>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-3 text-sm focus:border-blue-500 focus:outline-none"
+            placeholder="Search actor or event…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Filter size={13} className="text-slate-400" />
+          <select
+            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+            value={eventFilter}
+            onChange={(e) => setEventFilter(e.target.value)}
+          >
+            <option value="">All Events</option>
+            {eventTypes.map((t) => (
+              <option key={t} value={t}>{t ? t.replace(/_/g, " ") : "—"}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="space-y-0">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex gap-4 px-5 py-3 border-b border-slate-50">
+                {[...Array(4)].map((_, j) => (
+                  <div key={j} className="h-4 flex-1 animate-pulse rounded bg-slate-100" />
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-50">
+            {filtered.length === 0 ? (
+              <p className="py-12 text-center text-sm text-slate-400">No events found.</p>
+            ) : filtered.map((log, i) => (
+              <div key={i} className="flex items-start gap-4 px-5 py-3 hover:bg-slate-50 transition-colors">
+                <div className="flex-shrink-0 pt-0.5">
+                  <span
+                    className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize whitespace-nowrap ${
+                      EVENT_COLORS[log.event] || "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {log.event?.replace(/_/g, " ")}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-700">
+                    <span className="font-medium text-slate-900">{log.actor}</span>
+                    {log.details && Object.keys(log.details).length > 0 && (
+                      <span className="ml-1 text-slate-400 text-xs">
+                        — {Object.entries(log.details).map(([k, v]) => `${k}: ${v}`).join(", ")}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  <p className="text-xs text-slate-400">
+                    {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+                  </p>
+                  <p className="text-xs text-slate-300">
+                    {format(new Date(log.timestamp), "MMM d, HH:mm")}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
-const styles = {
-  page: { padding: 32 },
-  filters: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" },
-  select: { padding: "7px 10px", border: "1px solid #ddd", borderRadius: 4 },
-  input: { padding: "7px 12px", border: "1px solid #ddd", borderRadius: 4, fontSize: 14 },
-  table: { width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 8, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,.08)" },
-  th: { background: "#f5f5f5", padding: "10px 14px", textAlign: "left", fontSize: 13, color: "#666" },
-  td: { padding: "8px 12px", borderBottom: "1px solid #f0f0f0", fontSize: 13, verticalAlign: "top" },
-  pre: { margin: 0, fontSize: 11, maxWidth: 200, whiteSpace: "pre-wrap", wordBreak: "break-all" },
-  pagination: { display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" },
-  pgBtn: { padding: "6px 14px", border: "1px solid #ddd", borderRadius: 4, cursor: "pointer" },
-};

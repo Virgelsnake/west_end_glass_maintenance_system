@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     mongodb_db_name: str = "west_end_glass"
 
     # Meta Cloud API (WhatsApp)
+    meta_app_id: str = ""
     meta_whatsapp_token: str
     meta_phone_number_id: str
     meta_verify_token: str

@@ -37,6 +37,7 @@ class UserInDB(UserBase):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_activity: Optional[datetime] = None
+    pin_hash: Optional[str] = None  # for technician portal login
 
     class Config:
         populate_by_name = True

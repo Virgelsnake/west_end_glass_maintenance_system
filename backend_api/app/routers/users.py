@@ -19,7 +19,7 @@ def _serialize(doc) -> dict:
 @router.get("")
 async def list_users(
     active: Optional[bool] = None,
-    current_admin: str = Depends(get_current_admin)
+    current_admin: dict = Depends(get_current_admin)
 ):
     db = get_db()
     query = {}
@@ -30,7 +30,7 @@ async def list_users(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_user(user: UserCreate, current_admin: str = Depends(get_current_admin)):
+async def create_user(user: UserCreate, current_admin: dict = Depends(get_current_admin)):
     db = get_db()
     existing = await db.users.find_one({"phone_number": user.phone_number})
     if existing:
@@ -38,7 +38,7 @@ async def create_user(user: UserCreate, current_admin: str = Depends(get_current
     doc = user.model_dump()
     doc["created_at"] = datetime.utcnow()
     result = await db.users.insert_one(doc)
-    await log_event(db, "user_added", actor=current_admin, actor_type="admin",
+    await log_event(db, "user_added", actor=current_admin["username"], actor_type="admin",
                     payload={"phone_number": user.phone_number, "name": user.name})
     return {**doc, "_id": str(result.inserted_id)}
 
@@ -47,7 +47,7 @@ async def create_user(user: UserCreate, current_admin: str = Depends(get_current
 async def update_user(
     phone_number: str,
     update: UserUpdate,
-    current_admin: str = Depends(get_current_admin)
+    current_admin: dict = Depends(get_current_admin)
 ):
     db = get_db()
     changes = {k: v for k, v in update.model_dump().items() if v is not None}
@@ -60,7 +60,7 @@ async def update_user(
 
 
 @router.delete("/{phone_number}")
-async def deactivate_user(phone_number: str, current_admin: str = Depends(get_current_admin)):
+async def deactivate_user(phone_number: str, current_admin: dict = Depends(get_current_admin)):
     db = get_db()
     result = await db.users.update_one(
         {"phone_number": phone_number},
@@ -68,6 +68,6 @@ async def deactivate_user(phone_number: str, current_admin: str = Depends(get_cu
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
-    await log_event(db, "user_deactivated", actor=current_admin, actor_type="admin",
+    await log_event(db, "user_deactivated", actor=current_admin["username"], actor_type="admin",
                     payload={"phone_number": phone_number})
     return {"deactivated": True}
