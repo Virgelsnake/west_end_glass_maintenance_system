@@ -47,7 +47,7 @@ Rules:
 - If the technician asks about their open tickets or what else they have to do, call list_open_tickets using phone number {technician_phone}.
 - You are scoped to machine {machine_id}. If they mention a different machine, tell them to scan that machine's NFC tag.
 - When greeting a newly-selected ticket (tech just picked it from a list), say "Starting on" or "Working on", not "already on". Keep the greeting brief (one sentence) then show the first step.
-- For testing/simulator: techs can use /test-photo [step#] and /test-note [step#] [text] to simulate uploads without real media.
+- For testing/simulator: techs can use /test-photo and /test-note (step number is optional; auto-detects current step if omitted).
 - Keep responses to one or two sentences unless presenting a list.
 """
 
@@ -253,45 +253,82 @@ async def run_agent_loop(
 
     # ── Special handling for test commands (testing only) ───────────────
     if message_text.strip().startswith("/test-photo"):
-        # Format: /test-photo [step_index]
+        # Format: /test-photo [optional: step_index]
+        # If no step_index provided, use the first incomplete step
         parts = message_text.strip().split()
+        step_index = None
+        
         if len(parts) >= 2:
             try:
                 step_index = int(parts[1])
-                # Mark this step as complete with a simulated photo
-                await ticket_service.attach_photo_to_step(
-                    db,
-                    ticket_id,
-                    step_index,
-                    "[TEST_PHOTO_SIMULATED]",
-                    user["phone_number"],
-                )
-                return f"Test mode: Simulated photo for step {step_index}. Step marked complete."
-            except (ValueError, IndexError):
-                return "Invalid /test-photo command. Usage: /test-photo [step_number]"
+            except ValueError:
+                return "Invalid step number. Usage: /test-photo [step_number]"
         else:
-            return "Usage: /test-photo [step_number]"
+            # Auto-detect the current incomplete step
+            for step in ticket.get("steps", []):
+                if not step.get("completed", False):
+                    step_index = step.get("step_index")
+                    break
+        
+        if step_index is None:
+            return "No incomplete steps. All steps are already complete."
+        
+        # Simulate photo upload for this step
+        await ticket_service.attach_photo_to_step(
+            db,
+            ticket_id,
+            step_index,
+            "[TEST_PHOTO_SIMULATED]",
+            user["phone_number"],
+        )
+        return f"Test mode: Simulated photo for step {step_index}. Step marked complete."
 
     elif message_text.strip().startswith("/test-note"):
-        # Format: /test-note [step_index] [note text...]
+        # Format: /test-note [optional: step_index] [note text]
+        # If no args, uses current step with default note
+        # If one arg, tries to parse as step number, otherwise uses current step
+        # If two args, parses step number and note text
         parts = message_text.strip().split(maxsplit=2)
-        if len(parts) >= 3:
+        step_index = None
+        note_text = "Test note"
+        
+        if len(parts) == 1:
+            # Just /test-note, auto-detect step
+            for step in ticket.get("steps", []):
+                if not step.get("completed", False):
+                    step_index = step.get("step_index")
+                    break
+        elif len(parts) == 2:
+            # Could be /test-note [step_num] or /test-note [text]
+            try:
+                step_index = int(parts[1])
+                note_text = "Test note"
+            except ValueError:
+                # Not a number, treat as note text and auto-detect step
+                note_text = parts[1]
+                for step in ticket.get("steps", []):
+                    if not step.get("completed", False):
+                        step_index = step.get("step_index")
+                        break
+        else:  # len(parts) >= 3
             try:
                 step_index = int(parts[1])
                 note_text = parts[2]
-                # Attach note to step
-                await ticket_service.attach_note_to_step(
-                    db,
-                    ticket_id,
-                    step_index,
-                    note_text,
-                    user["phone_number"],
-                )
-                return f"Test mode: Note saved for step {step_index}: \"{note_text}\""
-            except (ValueError, IndexError):
-                return "Invalid /test-note command. Usage: /test-note [step_number] [note text]"
-        else:
-            return "Usage: /test-note [step_number] [note text]"
+            except ValueError:
+                return "Invalid step number. Usage: /test-note [step_number] [text]"
+        
+        if step_index is None:
+            return "No incomplete steps. All steps are already complete."
+        
+        # Save note for this step
+        await ticket_service.attach_note_to_step(
+            db,
+            ticket_id,
+            step_index,
+            note_text,
+            user["phone_number"],
+        )
+        return f"Test mode: Note saved for step {step_index}: \"{note_text}\""
 
     # ── Normal message processing ─────────────────────────────────────
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(

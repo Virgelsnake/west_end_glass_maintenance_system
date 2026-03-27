@@ -256,7 +256,9 @@ def print_help() -> None:
     print("  │     All work complete                                       │")
     print("  │                                                             │")
     print("  │  5. Testing Only - Simulate photo/note:                    │")
+    print("  │     /test-photo       (auto-detect incomplete step)        │")
     print("  │     /test-photo 2     (mark step 2 as photo complete)      │")
+    print("  │     /test-note        (add default note to current step)   │")
     print("  │     /test-note 2 Done (add note to step 2)                 │")
     print("  │                                                             │")
     print("  └─────────────────────────────────────────────────────────────┘")
@@ -334,10 +336,8 @@ def mode_1_chat_based(api_url: str, phone: str) -> None:
         # Handle test commands for photo/note simulation
         message_to_send = raw
         if raw.startswith("/test-photo"):
-            message_to_send = f"[TEST_PHOTO] {raw}"
             print("  ℹ️  Sending photo simulation command to backend...\n")
         elif raw.startswith("/test-note"):
-            message_to_send = f"[TEST_NOTE] {raw}"
             print("  ℹ️  Sending note simulation command to backend...\n")
 
         try:
@@ -408,10 +408,8 @@ def mode_2_deeplink(api_url: str, phone: str) -> None:
         # Handle test commands for photo/note simulation
         message_to_send = raw
         if raw.startswith("/test-photo"):
-            message_to_send = f"[TEST_PHOTO] {raw}"
             print("  ℹ️  Sending photo simulation command to backend...\n")
         elif raw.startswith("/test-note"):
-            message_to_send = f"[TEST_NOTE] {raw}"
             print("  ℹ️  Sending note simulation command to backend...\n")
 
         try:
