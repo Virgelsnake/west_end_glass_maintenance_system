@@ -1,0 +1,7 @@
+# Ignore environment files
+.env
+.env.local
+backend_api/.env
+
+# macOS
+.DS_Store
