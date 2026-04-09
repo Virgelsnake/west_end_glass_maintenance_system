@@ -1,0 +1,35 @@
+{
+  "source_file": "Bead Blaster Daily Checklist - new.docx",
+  "title": "Sand Blaster Daily Checklist",
+  "sections": [
+    {
+      "name": "General Appearance",
+      "items": [
+        "Is the Sand Blaster visually in good condition and clean.",
+        "Is the area around the Sand Blaster free from any obstructions."
+      ]
+    },
+    {
+      "name": "Mechanical / Electrical",
+      "items": [
+        "Filters Checked.",
+        "Air Pressure and Hoses Checked.",
+        "Rubbers Checked.",
+        "Water Checked.",
+        "Sand Checked.",
+        "Where Applicable are Electrical Cabinets free from Dust."
+      ]
+    },
+    {
+      "name": "Safety",
+      "items": [
+        "Are the Emergency Stops Functional.",
+        "Is there are Risk Assessment in place for the operation.",
+        "Is appropriate PPE Available and worn at all times."
+      ]
+    }
+  ],
+  "notes": [
+    "Filename says Bead Blaster, document text says Sand Blaster."
+  ]
+}

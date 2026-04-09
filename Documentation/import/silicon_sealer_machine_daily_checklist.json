@@ -1,0 +1,33 @@
+{
+  "source_file": "Silicon Sealer Daily Checklist-new.docx",
+  "title": "Silicon Sealer Machine Daily Checklist",
+  "sections": [
+    {
+      "name": "General Appearance",
+      "items": [
+        "Is the Silicon Sealer Machine visually in good condition and clean.",
+        "Is the area around the Silicon Sealer Machine free from any obstruction."
+      ]
+    },
+    {
+      "name": "Mechanical / Electrical",
+      "items": [
+        "Oil Levels Checked.",
+        "Air Pressure and Hoses Checked.",
+        "Filters Checked.",
+        "Where Applicable are Electrical Cabinets free from Dust."
+      ]
+    },
+    {
+      "name": "Safety",
+      "items": [
+        "Is the Emergency Stop Functional.",
+        "All Guards Fitted where applicable.",
+        "Sufficient Silicone in machine for operation.",
+        "PPE Signage visible.",
+        "Is there are Risk Assessment in place for the operation.",
+        "Is appropriate PPE Available and worn at all times."
+      ]
+    }
+  ]
+}

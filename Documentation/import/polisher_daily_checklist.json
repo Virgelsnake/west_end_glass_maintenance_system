@@ -1,0 +1,33 @@
+{
+  "source_file": "Polisher  Daily Checklist.doc",
+  "title": "Polisher Daily Checklist",
+  "sections": [
+    {
+      "name": "General Appearance",
+      "items": [
+        "Is the Polisher visually in good condition and clean.",
+        "Is the area around the Polisher free from any obstructions."
+      ]
+    },
+    {
+      "name": "Mechanical / Electrical",
+      "items": [
+        "Oil Levels Checked.",
+        "Air Pressure and Hoses Checked.",
+        "Polisher Wheels Checked",
+        "Water Checked",
+        "Tanks Cleaned",
+        "Where Applicable are Electrical Cabinets free from Dust"
+      ]
+    },
+    {
+      "name": "Safety",
+      "items": [
+        "Is the Emergency Stop Functional.",
+        "No Visible Spills",
+        "Is appropriate PPE Available and worn at all times.",
+        "Is there are Risk Assessment in place for the operation."
+      ]
+    }
+  ]
+}

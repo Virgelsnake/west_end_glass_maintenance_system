@@ -20,7 +20,10 @@ async def send_text_message(to: str, text: str) -> dict:
     }
     async with httpx.AsyncClient() as client:
         resp = await client.post(url, json=payload, headers=headers)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            print(f"[WHATSAPP] ERROR: HTTP {resp.status_code}")
+            print(f"[WHATSAPP] Response: {resp.text}")
+            raise Exception(f"Meta API error: HTTP {resp.status_code} - {resp.text}")
         return resp.json()
 
 

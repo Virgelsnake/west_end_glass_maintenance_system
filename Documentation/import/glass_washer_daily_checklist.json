@@ -1,0 +1,33 @@
+{
+  "source_file": "Glass Washer  Daily Checklist.doc",
+  "title": "Glass Washer Daily Checklist",
+  "sections": [
+    {
+      "name": "General Appearance",
+      "items": [
+        "Is the Glass Washer visually in good condition and clean.",
+        "Is the area around the Glass Washer free from any obstructions."
+      ]
+    },
+    {
+      "name": "Mechanical / Electrical",
+      "items": [
+        "Filters Checked.",
+        "Air Pressure and Hoses Checked.",
+        "Rubbers Checked.",
+        "Water Checked.",
+        "Tanks Cleaned.",
+        "Where Applicable are Electrical Cabinets free from Dust."
+      ]
+    },
+    {
+      "name": "Safety",
+      "items": [
+        "Are the Emergency Stops Functional.",
+        "Is there are Risk Assessment in place for the operation.",
+        "Is appropriate PPE Available and worn at all times.",
+        "No Visible Spills."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "source_file": "Waterjet Cutter Daily Checklist.doc",
+  "title": "Waterjet Cutter Daily Checklist",
+  "sections": [
+    {
+      "name": "General Appearance",
+      "items": [
+        "Is the Waterjet Cutter visually in good condition and clean.",
+        "Is the area around the Waterjet Cutter free from any obstructions."
+      ]
+    },
+    {
+      "name": "Mechanical / Electrical",
+      "items": [
+        "Oil Levels Checked.",
+        "Air Pressure and Hoses Checked.",
+        "Rubbers Checked.",
+        "Water Checked.",
+        "Sand Checked.",
+        "Rubbers Checked.",
+        "Where Applicable are Electrical Cabinets free from Dust."
+      ]
+    },
+    {
+      "name": "Safety",
+      "items": [
+        "Is the Emergency Stop Functional.",
+        "Is there are Risk Assessment in place for the operation.",
+        "Is appropriate PPE Available and worn at all times."
+      ]
+    }
+  ]
+}

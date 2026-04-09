@@ -1,0 +1,34 @@
+{
+  "source_file": "Paint Booth Daily Checklist - New.doc.docx",
+  "title": "Paint Booth Daily Checklist",
+  "sections": [
+    {
+      "name": "General Appearance",
+      "items": [
+        "Is the Paint Booth visually in good condition and clean.",
+        "Is the area around the Paint Booth free from any obstructions and Dust Free."
+      ]
+    },
+    {
+      "name": "Mechanical / Electrical",
+      "items": [
+        "Extractor Fan Checked.",
+        "Air Hoses Checked.",
+        "Spray Gun Checked.",
+        "Scales Checked.",
+        "Agitator Function Tested",
+        "Where Applicable are Electrical Cabinets free from Dust"
+      ]
+    },
+    {
+      "name": "Safety",
+      "items": [
+        "Is the Emergency Stop Functional.",
+        "Are all Paints not in used stored in appropriate storage cabinet",
+        "Are MSDS Sheets COSHH Assessments Available.",
+        "Is there are Risk Assessment in place for the operation.",
+        "Is appropriate PPE Available and worn at all times."
+      ]
+    }
+  ]
+}

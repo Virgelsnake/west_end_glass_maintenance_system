@@ -1,0 +1,37 @@
+{
+  "source_file": "Compressor Daily Checklist.doc",
+  "title": "Generator Daily Checklist",
+  "sections": [
+    {
+      "name": "General Appearance",
+      "items": [
+        "Is Generator visually in good condition and clean.",
+        "Is the area around the Plant Room free from any obstructions and walkway clear."
+      ]
+    },
+    {
+      "name": "Mechanical / Electrical",
+      "items": [
+        "Have all operational functions of the Generator Been Tested.",
+        "No Visible Leaks (Oil Water Diesel).",
+        "Oil Levels Checked.",
+        "Water Levels Checked.",
+        "Are all Hydraulic Hoses in good condition.",
+        "Is the electrical wiring in good condition.",
+        "Where Applicable are Electrical Cabinets free from Dust."
+      ]
+    },
+    {
+      "name": "Safety",
+      "items": [
+        "Is the Emergency Stop Functional.",
+        "Are all Machinery Guards in Place.",
+        "Is appropriate PPE available and worn at all times.",
+        "Is PPE Signage Visible."
+      ]
+    }
+  ],
+  "notes": [
+    "Filename says Compressor, document text says Generator."
+  ]
+}

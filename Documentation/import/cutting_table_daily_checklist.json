@@ -1,0 +1,35 @@
+{
+  "source_file": "Cutting Table Daily Checklist.doc",
+  "title": "Cutting Table Daily Checklist",
+  "sections": [
+    {
+      "name": "General Appearance",
+      "items": [
+        "Is the Cutting Table visually in good condition and clean.",
+        "Is the area around the Cutting Table free from any obstructions.",
+        "Is the Cutting Table Clear of Broken Glass."
+      ]
+    },
+    {
+      "name": "Mechanical / Electrical",
+      "items": [
+        "Electrical Cables Checked.",
+        "Air Pressure and Hoses.",
+        "Cutters Secured.",
+        "Cutting Oil Level Checked.",
+        "Hydraulic Oil Level Checked (Table 1 Only).",
+        "Grinder Filter (Weekly Check).",
+        "Where Applicable are Electrical Cabinets free from Dust."
+      ]
+    },
+    {
+      "name": "Safety",
+      "items": [
+        "Is the Emergency Stop Functional.",
+        "Are Barriers in Place.",
+        "Is appropriate PPE Available and worn at all times.",
+        "Is there are Risk Assessment in place for the operation."
+      ]
+    }
+  ]
+}

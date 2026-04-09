@@ -16,6 +16,8 @@ from .routers import (
     simulate,
 )
 from .routers import admins, tech_auth, tech_tickets, dashboard
+from .routers import dailys
+from .services import daily_scheduler
 
 app = FastAPI(
     title="West End Glass Maintenance System API",
@@ -56,9 +58,13 @@ async def startup():
     await connect_db()
     await _seed_admin()
 
+    from .database import get_db
+    await daily_scheduler.init_scheduler(get_db())
+
 
 @app.on_event("shutdown")
 async def shutdown():
+    daily_scheduler.shutdown()
     await close_db()
 
 
@@ -103,6 +109,7 @@ app.include_router(admins.router)
 app.include_router(tech_auth.router)
 app.include_router(tech_tickets.router)
 app.include_router(dashboard.router)
+app.include_router(dailys.router)
 
 
 @app.get("/settings/public", tags=["settings"])

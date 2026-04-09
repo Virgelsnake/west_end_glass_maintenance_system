@@ -1,0 +1,48 @@
+{
+  "source_file": "WEG-F 14 Daily Forklift Inspection Checklist.doc",
+  "title": "Daily Forklift Checklist",
+  "sections": [
+    {
+      "name": "Pre-start mechanical check",
+      "items": [
+        "With ignition switch in \"OFF\" position, check and correct as needed:",
+        "level of radiator coolant",
+        "engine oil",
+        "hydraulic oil",
+        "automatic transmission oil",
+        "Check fuel level.",
+        "Check tire pressure."
+      ]
+    },
+    {
+      "name": "Safety systems",
+      "items": [
+        "Check that all Safety systems are in place and operational:",
+        "Horn",
+        "Rotating or flashing beacon",
+        "Ensure the Gas Bottle is secured to the vehicle",
+        "Seat belt",
+        "Rollover protection (ROPS) that also protects the operator from falling objects",
+        "Mechanical high-lift stop",
+        "Label displaying the type of fuel (gasoline, diesel or propane) used",
+        "Load chart",
+        "Speed limit sign",
+        "Locking pins for forks",
+        "Stop lugs at the end of the lateral beam (to avoid dropping fork)",
+        "Working lights (front and rear)"
+      ]
+    },
+    {
+      "name": "Operational check",
+      "items": [
+        "Make sure that all gauges are functioning.",
+        "After three minutes, check the level of the automatic transmission oil. (Automatic transmissions only.)",
+        "Apply the parking brake, move the lever to Reverse and check that the parking brake locks the vehicle.",
+        "Test all the controls by lifting the forks to their maximum height.",
+        "Slide forks slowly to check that locking pins drop into place and do not allow for lateral movement.",
+        "Move forklift forward and verify that brakes are operational.",
+        "Return forks to the locked position, stop the engine and apply the brakes. Inspect for hydraulic leaks."
+      ]
+    }
+  ]
+}

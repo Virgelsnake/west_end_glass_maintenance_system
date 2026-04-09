@@ -1,0 +1,32 @@
+{
+  "source_file": "Arrissor Machine Daily Checklist.doc",
+  "title": "Arrisor Machine Daily Checklist",
+  "sections": [
+    {
+      "name": "General Appearance",
+      "items": [
+        "Is the Glass Arrisor Machine visually in good condition and clean.",
+        "Is the area around the Glass Arrisor Machine free from any obstructions."
+      ]
+    },
+    {
+      "name": "Mechanical / Electrical",
+      "items": [
+        "Oil Levels Checked.",
+        "Air Pressure and Hoses Checked.",
+        "Filters Checked.",
+        "Ensure Air Intakes are Clear of any Dust etc."
+      ]
+    },
+    {
+      "name": "Safety",
+      "items": [
+        "Is the Emergency Stop Functional.",
+        "All Guards Fitted.",
+        "PPE Signage visible.",
+        "Is there are Risk Assessment in place for the operation.",
+        "Is appropriate PPE Available and worn at all times."
+      ]
+    }
+  ]
+}

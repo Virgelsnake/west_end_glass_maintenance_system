@@ -17,6 +17,10 @@ AuditEventType = Literal[
     "user_added",
     "user_deactivated",
     "auth_failure",
+    "daily_template_created",
+    "daily_template_updated",
+    "daily_template_deleted",
+    "daily_ticket_created",
 ]
 
 ActorType = Literal["technician", "admin", "system"]

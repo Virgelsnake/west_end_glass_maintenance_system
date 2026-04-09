@@ -60,10 +60,18 @@ async def simulate_message(body: SimulateMessageRequest):
         from ..services import whatsapp as wa_service
         response_text = result.get("response_text", "")
         if response_text:
-            await wa_service.send_text_message(body.phone_number, response_text)
+            phone = body.phone_number
+            print(f"[SIMULATE] Sending to: {phone}")
+            print(f"[SIMULATE] Message preview: {response_text[:100]}...")
+            await wa_service.send_text_message(phone, response_text)
+            print(f"[SIMULATE] ✓ Message sent successfully to WhatsApp")
+        else:
+            print(f"[SIMULATE] No response text to send")
     except Exception as e:
         # Log error but don't fail the response — user still sees it on screen
-        print(f"Warning: Failed to send response to WhatsApp: {e}")
+        import traceback
+        print(f"[SIMULATE] ❌ FAILED to send response to WhatsApp: {e}")
+        print(f"[SIMULATE] Traceback: {traceback.format_exc()}")
     
     return result
 
