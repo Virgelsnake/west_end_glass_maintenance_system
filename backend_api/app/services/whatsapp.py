@@ -116,12 +116,12 @@ async def send_ticket_photo(to: str, file_path: str, caption: str = "") -> None:
 async def send_ticket_assignment_notification(
     to: str,
     tech_name: str,
-    ticket_title: str,
     machine_id: str,
+    ticket_title: str = "",  # kept for backward compat, not used in template
 ) -> dict:
     """
     Notify a technician that a ticket has been assigned to them.
-    Uses the test_maintenance_chat template (4 params: name, datetime, title, machine_id).
+    Uses the westend_glass__machine_servicing_system template (3 params: user_name, service_date, machine_name).
     """
     from datetime import datetime
     url = f"{WHATSAPP_API_BASE}/{settings.meta_phone_number_id}/messages"
@@ -135,15 +135,14 @@ async def send_ticket_assignment_notification(
         "to": to,
         "type": "template",
         "template": {
-            "name": "test_maintenance_chat",
-            "language": {"code": "en_US"},
+            "name": "westend_glass__machine_servicing_system",
+            "language": {"code": "en"},
             "components": [
                 {
                     "type": "body",
                     "parameters": [
                         {"type": "text", "text": tech_name},
                         {"type": "text", "text": now},
-                        {"type": "text", "text": ticket_title},
                         {"type": "text", "text": machine_id},
                     ],
                 }
@@ -152,5 +151,8 @@ async def send_ticket_assignment_notification(
     }
     async with httpx.AsyncClient() as client:
         resp = await client.post(url, json=payload, headers=headers)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            raise Exception(
+                f"Meta template API error: HTTP {resp.status_code} — {resp.text}"
+            )
         return resp.json()

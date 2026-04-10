@@ -62,7 +62,6 @@ async def create_ticket(ticket: TicketCreate, current_admin: dict = Depends(get_
             await wa_service.send_ticket_assignment_notification(
                 to=ticket.assigned_to,
                 tech_name=tech_name,
-                ticket_title=ticket.title,
                 machine_id=ticket.machine_id,
             )
             logger.info("Assignment notification sent to %s for new ticket", ticket.assigned_to)
@@ -121,7 +120,6 @@ async def update_ticket(
             await wa_service.send_ticket_assignment_notification(
                 to=new_assigned,
                 tech_name=tech_name,
-                ticket_title=ticket.get("title", "Maintenance Ticket"),
                 machine_id=ticket.get("machine_id", ""),
             )
             logger.info("Assignment notification sent to %s", new_assigned)

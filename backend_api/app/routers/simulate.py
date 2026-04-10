@@ -76,6 +76,33 @@ async def simulate_message(body: SimulateMessageRequest):
     return result
 
 
+class SimulateTemplateRequest(BaseModel):
+    phone_number: str
+    name: str = "Test User"
+    datetime_str: str = ""
+    title: str = "Test Ticket"
+    machine: str = "Test Machine"
+
+
+@router.post("/template")
+async def simulate_template(body: SimulateTemplateRequest):
+    """
+    Fire the test_maintenance_chat WhatsApp template with custom text.
+    Use this to re-open the 24h conversation window or test template delivery.
+    """
+    from ..services import whatsapp as wa_service
+    from datetime import datetime as dt
+
+    datetime_str = body.datetime_str or dt.utcnow().strftime("%B %d, %Y at %I:%M %p UTC")
+
+    result = await wa_service.send_ticket_assignment_notification(
+        to=body.phone_number,
+        tech_name=body.name,
+        machine_id=body.machine,
+    )
+    return {"status": "sent", "meta_response": result}
+
+
 @router.post("/photo")
 async def simulate_photo_upload(
     ticket_id: str,

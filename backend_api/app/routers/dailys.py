@@ -215,7 +215,6 @@ async def _create_daily_ticket(db, template: dict) -> str:
         await wa_service.send_ticket_assignment_notification(
             to=template["assigned_to"],
             tech_name=tech_name,
-            ticket_title=title,
             machine_id=template["machine_id"],
         )
     except Exception as exc:
