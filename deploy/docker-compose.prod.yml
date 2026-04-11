@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - internal
+
+  fastapi-app:
+    image: 150314557466.dkr.ecr.us-west-2.amazonaws.com/west-end-glass-api:latest
+    container_name: fastapi-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URL=mongodb://mongo:27017
+    ports:
+      - "8000:8000"
+    volumes:
+      - photo_data:/data/photos
+    depends_on:
+      - mongo
+    networks:
+      - internal
+
+volumes:
+  mongo_data:
+  photo_data:
+
+networks:
+  internal:
+    driver: bridge
