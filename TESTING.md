@@ -57,7 +57,7 @@ See [tools/README.md](tools/README.md) for detailed examples.
 - Verify webhook integration with Meta
 - Test end-to-end production flow
 
-**⚠️ WARNING:** This sends real WhatsApp messages. Use test numbers only. 
+**⚠️ WARNING:** This sends real WhatsApp messages. Use test numbers only.   
 
 See [test/test_whatsapp_text.py](test/test_whatsapp_text.py) for instructions.
 
