@@ -11,10 +11,9 @@ env:
   AWS_REGION: us-west-2
   ECR_REGISTRY: 150314557466.dkr.ecr.us-west-2.amazonaws.com
   ECR_REPOSITORY: west-end-glass-api
-  DEPLOY_DIR: /home/phocus/west_end_glass_maintenance_system
 
 jobs:
-  build-and-deploy:
+  build-and-push:
     runs-on: self-hosted
     steps:
       - name: Checkout
@@ -38,16 +37,3 @@ jobs:
           docker build -t $IMAGE:latest -t $IMAGE:${{ github.sha }} ./backend_api
           docker push $IMAGE:latest
           docker push $IMAGE:${{ github.sha }}
-
-      - name: Write docker-compose.yml to deploy dir
-        run: |
-          cp deploy/docker-compose.prod.yml ${{ env.DEPLOY_DIR }}/docker-compose.yml
-
-      - name: Pull new image and restart
-        run: |
-          cd ${{ env.DEPLOY_DIR }}
-          docker compose pull fastapi-app
-          docker compose up -d fastapi-app
-
-      - name: Clean up old images
-        run: docker image prune -f
