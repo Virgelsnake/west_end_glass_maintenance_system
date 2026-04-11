@@ -2,7 +2,7 @@
 
 This document explains how to use the West End Glass testing tools as part of your development workflow.
 
-## Three Types of Testing
+## Three Types of Testing 
 
 ### 1. 🤖 WhatsApp Bot Testing (CLI Simulator)
 
