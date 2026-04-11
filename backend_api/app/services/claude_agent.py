@@ -10,9 +10,12 @@ The loop runs until Claude sends a final text response to the technician.
 """
 
 import json
+import logging
 from typing import Optional
 import anthropic
 from bson import ObjectId
+
+logger = logging.getLogger("claude_agent")
 
 from ..config import settings
 from ..services import ticket_service, whatsapp as wa_service
@@ -42,11 +45,13 @@ Rules:
 - For photo steps, call attach_photo when they send an image.
 - When all steps are complete, briefly confirm the work is done, then call close_ticket directly. Do not ask them to type a word or send a command.
 - After calling close_ticket, relay the remaining machine work exactly as the tool result states — nothing more.
-- If the technician sends a bare number (1, 2, 3...) while on an active step, they want to switch to a different ticket on this machine. Call switch_ticket with that number.
-- If the technician asks to change tickets, switch, or back out (e.g., "change tickets", "other ticket", "back"), you will receive a new list of available tickets on the same machine. Wait for them to send a number to pick the new ticket.
+- IMPORTANT: Do NOT present numbered lists for ticket selection or step options. Interactive buttons and list pickers are sent automatically by the system after your message. Just ask the question in one sentence.
+- For confirmation steps, ask "Ready?" or "Step X complete?" in one sentence — the Done/Issue buttons will appear automatically.
+- For note steps, ask your question in one sentence — preset note buttons will appear automatically. The tech may also type a custom value.
+- If the technician asks to change tickets, switch, or back out, the system will handle ticket switching. Tell them to use the menu that appeared or to scan the NFC tag again.
 - If the technician asks about their open tickets or what else they have to do, call list_open_tickets using phone number {technician_phone}.
 - You are scoped to machine {machine_id}. If they mention a different machine, tell them to scan that machine's NFC tag.
-- When greeting a newly-selected ticket (tech just picked it from a list), say "Starting on" or "Working on", not "already on". Keep the greeting brief (one sentence) then show the first step.
+- When greeting a newly-selected ticket (tech just picked it from a list), say "Starting on" or "Working on", not "already on". Keep the greeting brief (one sentence) then present the first step.
 - For testing/simulator: techs can use /test-photo and /test-note (step number is optional; auto-detects current step if omitted).
 - Keep responses to one or two sentences unless presenting a list.
 """
@@ -189,7 +194,10 @@ async def _execute_tool(
             )
             return f"Photo downloaded and attached to step {tool_input['step_index']}."
         except Exception as e:
-            # In simulator/test mode or if download fails, return error message
+            logger.exception(
+                "attach_photo failed — media_id=%s ticket=%s step=%s: %s",
+                tool_input.get('media_id'), tool_input.get('ticket_id'), tool_input.get('step_index'), e,
+            )
             return f"Could not download photo (media_id: {tool_input['media_id']}). This may happen in test mode. Please try resending the photo or continue with the next step."
 
     elif tool_name == "close_ticket":

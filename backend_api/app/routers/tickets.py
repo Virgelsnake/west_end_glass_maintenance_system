@@ -63,6 +63,7 @@ async def create_ticket(ticket: TicketCreate, current_admin: dict = Depends(get_
                 to=ticket.assigned_to,
                 tech_name=tech_name,
                 machine_id=ticket.machine_id,
+                ticket_title=ticket.title,
             )
             logger.info("Assignment notification sent to %s for new ticket", ticket.assigned_to)
         except Exception as exc:
@@ -121,6 +122,7 @@ async def update_ticket(
                 to=new_assigned,
                 tech_name=tech_name,
                 machine_id=ticket.get("machine_id", ""),
+                ticket_title=ticket.get("title", ""),
             )
             logger.info("Assignment notification sent to %s", new_assigned)
         except Exception as exc:

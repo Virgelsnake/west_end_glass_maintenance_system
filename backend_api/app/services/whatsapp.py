@@ -2,7 +2,7 @@ import httpx
 import os
 from ..config import settings
 
-WHATSAPP_API_BASE = "https://graph.facebook.com/v19.0"
+WHATSAPP_API_BASE = "https://graph.facebook.com/v25.0"
 
 
 async def send_text_message(to: str, text: str) -> dict:
@@ -135,14 +135,15 @@ async def send_ticket_assignment_notification(
         "to": to,
         "type": "template",
         "template": {
-            "name": "westend_glass__machine_servicing_system",
-            "language": {"code": "en"},
+            "name": "test_maintenance_chat",
+            "language": {"code": "en_US"},
             "components": [
                 {
                     "type": "body",
                     "parameters": [
                         {"type": "text", "text": tech_name},
                         {"type": "text", "text": now},
+                        {"type": "text", "text": ticket_title},
                         {"type": "text", "text": machine_id},
                     ],
                 }
@@ -154,5 +155,74 @@ async def send_ticket_assignment_notification(
         if resp.status_code >= 400:
             raise Exception(
                 f"Meta template API error: HTTP {resp.status_code} — {resp.text}"
+            )
+        return resp.json()
+
+
+async def send_interactive_buttons(to: str, body_text: str, buttons: list) -> dict:
+    """
+    Send an interactive button message (up to 3 buttons).
+
+    buttons: list of {"id": "...", "title": "..."} dicts (max 3, title max 20 chars)
+    """
+    url = f"{WHATSAPP_API_BASE}/{settings.meta_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {settings.meta_whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": body_text},
+            "action": {
+                "buttons": [
+                    {"type": "reply", "reply": {"id": b["id"], "title": b["title"][:20]}}
+                    for b in buttons[:3]
+                ]
+            },
+        },
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code >= 400:
+            raise Exception(
+                f"Meta interactive buttons API error: HTTP {resp.status_code} — {resp.text}"
+            )
+        return resp.json()
+
+
+async def send_interactive_list(to: str, body_text: str, button_label: str, sections: list) -> dict:
+    """
+    Send an interactive list picker message.
+
+    sections: list of {"title": "...", "rows": [{"id": "...", "title": "...", "description": "..."}]}
+    Each section can have up to 10 rows total; title max 24 chars, description max 72 chars.
+    """
+    url = f"{WHATSAPP_API_BASE}/{settings.meta_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {settings.meta_whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {"text": body_text},
+            "action": {
+                "button": button_label[:20],
+                "sections": sections,
+            },
+        },
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code >= 400:
+            raise Exception(
+                f"Meta interactive list API error: HTTP {resp.status_code} — {resp.text}"
             )
         return resp.json()

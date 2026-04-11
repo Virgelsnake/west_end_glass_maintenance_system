@@ -36,7 +36,8 @@ export default function AppLayout() {
           >
             <Menu size={20} />
           </button>
-          <span className="font-semibold text-slate-800">West End Glass</span>
+          <img src="/logo.png" alt="West End Glass" className="h-7 w-7 object-contain" />
+          <span className="font-semibold" style={{color: '#113c6e'}}>West End Glass</span>
         </header>
 
         <main className="flex-1 overflow-y-auto">

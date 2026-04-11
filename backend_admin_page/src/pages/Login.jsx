@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Wrench, AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -27,15 +27,13 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
+    <div className="flex min-h-screen items-center justify-center px-4" style={{background: '#0d2d52'}}>
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center justify-center rounded-2xl bg-blue-600 p-3 mb-3">
-            <Wrench size={28} className="text-white" />
-          </div>
+          <img src="/logo.png" alt="West End Glass" className="mx-auto mb-4 h-20 w-20 object-contain" />
           <h1 className="text-2xl font-bold text-white">West End Glass</h1>
-          <p className="mt-1 text-sm text-slate-400">Maintenance System — Admin Portal</p>
+          <p className="mt-1 text-sm" style={{color: '#7cadd8'}}>Maintenance System — Admin Portal</p>
         </div>
 
         {/* Card */}
@@ -76,7 +74,8 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+              style={{background: '#ee6300'}}
             >
               {loading && <Loader2 size={15} className="animate-spin" />}
               {loading ? "Signing in…" : "Sign In"}
@@ -86,7 +85,7 @@ export default function Login() {
 
         <p className="mt-4 text-center text-xs text-slate-500">
           Field technician?{" "}
-          <a href="/tech/login" className="text-blue-400 hover:underline">
+          <a href="/tech/login" className="hover:underline" style={{color: '#ee6300'}}>
             Access the field portal →
           </a>
         </p>

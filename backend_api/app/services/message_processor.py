@@ -18,6 +18,7 @@ from bson import ObjectId
 from .ticket_service import get_open_tickets_for_machine
 from .audit_service import log_event
 from . import claude_agent
+from . import interactive_handler
 
 
 async def _set_user_context(db, phone_number: str, **kwargs) -> None:
@@ -64,10 +65,12 @@ async def process_inbound_message(
         )
         return {
             "authorized": False,
+            "response_type": "text",
             "response_text": (
                 "Sorry, this number is not registered. "
                 "Please contact your administrator."
             ),
+            "followup_interactive": None,
             "ticket_id": None,
             "ticket_title": None,
             "ticket_status": None,
@@ -113,7 +116,9 @@ async def process_inbound_message(
             await _set_user_context(db, phone_number, active_machine_id=machine_id, active_ticket_id=None)
             return {
                 "authorized": True,
+                "response_type": "text",
                 "response_text": f"No open tickets for {machine_id}.",
+                "followup_interactive": None,
                 "ticket_id": None,
                 "ticket_title": None,
                 "ticket_status": None,
@@ -128,23 +133,17 @@ async def process_inbound_message(
                 active_ticket_id=str(ticket["_id"]),
             )
         else:
-            # Multiple tickets — store machine context, wait for selection
+            # Multiple tickets — store machine context, return interactive list
             await _set_user_context(db, phone_number, active_machine_id=machine_id, active_ticket_id=None)
-            ticket_list = "\n".join([
-                f"{i+1}. {t['title']} (status: {t['status']})"
-                for i, t in enumerate(tickets)
-            ])
             return {
                 "authorized": True,
-                "response_text": (
-                    f"Found {len(tickets)} tickets for {machine_id}:\n\n"
-                    f"{ticket_list}\n\n"
-                    "Reply with the number of the ticket to work on."
-                ),
+                "response_type": "interactive_list",
+                "response_text": f"Open tickets for {machine_id}",  # fallback
+                "machine_id": machine_id,
+                "tickets": tickets,
                 "ticket_id": None,
                 "ticket_title": None,
                 "ticket_status": None,
-                "machine_id": machine_id,
                 "assigned_to": phone_number,
             }
 
@@ -157,7 +156,9 @@ async def process_inbound_message(
             count = len(tickets) if tickets else 0
             return {
                 "authorized": True,
+                "response_type": "text",
                 "response_text": f"Invalid selection. Reply with a number between 1 and {count}.",
+                "followup_interactive": None,
                 "ticket_id": None,
                 "ticket_title": None,
                 "ticket_status": None,
@@ -178,28 +179,25 @@ async def process_inbound_message(
             tickets = await get_open_tickets_for_machine(db, machine_id)
             await _set_user_context(db, phone_number, active_ticket_id=None)
             if len(tickets) > 1:
-                ticket_list = "\n".join([
-                    f"{i+1}. {t['title']} (status: {t['status']})"
-                    for i, t in enumerate(tickets)
-                ])
                 return {
                     "authorized": True,
-                    "response_text": (
-                        f"Tickets for {machine_id}:\n\n"
-                        f"{ticket_list}\n\n"
-                        "Reply with the number to switch, or continue with your current ticket."
-                    ),
+                    "response_type": "interactive_list",
+                    "response_text": f"Tickets for {machine_id} — tap to select:",
+                    "followup_interactive": None,
+                    "machine_id": machine_id,
+                    "tickets": tickets,
                     "ticket_id": None,
                     "ticket_title": None,
                     "ticket_status": None,
-                    "machine_id": machine_id,
                     "assigned_to": phone_number,
                 }
             else:
                 # Only one ticket
                 return {
                     "authorized": True,
+                    "response_type": "text",
                     "response_text": f"Only one ticket open for {machine_id}. Continue with it.",
+                    "followup_interactive": None,
                     "ticket_id": None,
                     "ticket_title": None,
                     "ticket_status": None,
@@ -233,9 +231,11 @@ async def process_inbound_message(
     if ticket is None:
         return {
             "authorized": True,
+            "response_type": "text",
             "response_text": (
                 "No active ticket. Scan an NFC tag or contact your administrator."
             ),
+            "followup_interactive": None,
             "ticket_id": None,
             "ticket_title": None,
             "ticket_status": None,
@@ -245,15 +245,18 @@ async def process_inbound_message(
 
     ticket_id = str(ticket["_id"])
 
+    # ── 5. Load conversation history ─────────────────────────────
+    # Load BEFORE linking the current inbound message to ticket_id so it is
+    # not included here. _build_conversation_messages adds it as the tail
+    # "new_message", keeping Claude's alternating role requirement intact.
+    history_cursor = db.messages.find({"ticket_id": ticket_id}).sort("timestamp", 1)
+    conversation_history = await history_cursor.to_list(length=200)
+
     # Link the inbound message to this ticket now that we know it
     await db.messages.update_one(
         {"_id": inbound_result.inserted_id},
         {"$set": {"ticket_id": ticket_id}},
     )
-
-    # ── 5. Load conversation history ──────────────────────────────
-    history_cursor = db.messages.find({"ticket_id": ticket_id}).sort("timestamp", 1)
-    conversation_history = await history_cursor.to_list(length=200)
 
     # ── 6. Run Claude agentic loop ────────────────────────────────
     response_text = await claude_agent.run_agent_loop(
@@ -287,9 +290,21 @@ async def process_inbound_message(
     # ── 8. Reload ticket for fresh status ─────────────────────────
     ticket = await db.tickets.find_one({"_id": ticket["_id"]})
 
+    # ── 9. Build follow-up interactive buttons for next step ─────
+    # After Claude responds, send interactive step buttons so the tech
+    # can tap instead of type for standard confirmation/note steps.
+    followup_interactive = None
+    if ticket and ticket.get("status") != "closed":
+        followup_interactive = interactive_handler.build_step_buttons(ticket)
+        if followup_interactive is None:
+            # All steps done — offer close-ticket buttons
+            followup_interactive = interactive_handler.build_close_ticket_buttons(ticket)
+
     return {
         "authorized": True,
+        "response_type": "text",
         "response_text": response_text,
+        "followup_interactive": followup_interactive,
         "ticket_id": ticket_id,
         "ticket_title": ticket.get("title"),
         "ticket_status": ticket.get("status"),

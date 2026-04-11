@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 import os
-from ..auth import get_current_admin
 from ..config import settings
 
 router = APIRouter(prefix="/tickets", tags=["photos"])
@@ -11,7 +10,6 @@ router = APIRouter(prefix="/tickets", tags=["photos"])
 async def get_photo(
     ticket_id: str,
     filename: str,
-    current_admin: dict = Depends(get_current_admin),
 ):
     """Serve a stored photo file for a ticket step."""
     # Prevent path traversal
