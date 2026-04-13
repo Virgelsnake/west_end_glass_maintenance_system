@@ -19,7 +19,7 @@ services:
     environment:
       - MONGODB_URL=mongodb://mongo:27017
     ports:
-      - "8000:8000"
+      - "8361:8000"
     volumes:
       - photo_data:/data/photos
     depends_on:

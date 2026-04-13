@@ -1,25 +1,43 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import client from "../api/client";
+import StepEditor from "../components/StepEditor";
 
-const COMPLETION_TYPES = ["confirmation", "note", "photo", "manual"];
+const COLUMNS = [
+  { key: "machine_id",  label: "Machine ID" },
+  { key: "title",       label: "Title" },
+  { key: "assigned_to", label: "Assigned To" },
+  { key: "priority",    label: "Priority" },
+  { key: "status",      label: "Status" },
+  { key: "created_at",  label: "Created" },
+];
+
+function SortIcon({ active, dir }) {
+  if (!active) return <span style={{ color: "#ccc", fontSize: 10, marginLeft: 3 }}>⇅</span>;
+  return <span style={{ fontSize: 10, marginLeft: 3 }}>{dir === "asc" ? "↑" : "↓"}</span>;
+}
 
 export default function Tickets() {
   const [tickets, setTickets] = useState([]);
   const [searchParams] = useSearchParams();
-  const [filter, setFilter] = useState(searchParams.get("status") || "");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "");
+  const [search, setSearch] = useState(searchParams.get("machine") || "");
+  const [assignedFilter, setAssignedFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sortKey, setSortKey] = useState("priority");
+  const [sortDir, setSortDir] = useState("desc");
   const [showCreate, setShowCreate] = useState(false);
   const [machines, setMachines] = useState([]);
   const [users, setUsers] = useState([]);
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => { load(); }, [statusFilter]);
 
   async function load() {
-    const params = filter ? `?status=${filter}` : "";
+    const params = statusFilter ? `?status=${statusFilter}` : "";
     const res = await client.get(`/tickets${params}`);
-    // Sort by priority descending client-side
-    setTickets([...res.data].sort((a, b) => b.priority - a.priority));
+    setTickets(res.data);
   }
 
   async function openCreate() {
@@ -37,13 +55,75 @@ export default function Tickets() {
     load();
   }
 
+  function toggleSort(key) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "priority" ? "desc" : "asc");
+    }
+  }
+
+  const displayed = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const fromTs = dateFrom ? new Date(dateFrom).getTime() : null;
+    const toTs   = dateTo   ? new Date(dateTo + "T23:59:59").getTime() : null;
+
+    let rows = tickets.filter((t) => {
+      if (q) {
+        const hit =
+          (t.machine_id || "").toLowerCase().includes(q) ||
+          (t.title || "").toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      if (assignedFilter && (t.assigned_to || "") !== assignedFilter) return false;
+      if (fromTs || toTs) {
+        const ts = t.created_at ? new Date(t.created_at).getTime() : 0;
+        if (fromTs && ts < fromTs) return false;
+        if (toTs   && ts > toTs)   return false;
+      }
+      return true;
+    });
+
+    rows = [...rows].sort((a, b) => {
+      let av = a[sortKey] ?? "";
+      let bv = b[sortKey] ?? "";
+      if (sortKey === "created_at") {
+        av = av ? new Date(av).getTime() : 0;
+        bv = bv ? new Date(bv).getTime() : 0;
+      } else if (sortKey === "priority") {
+        av = Number(av);
+        bv = Number(bv);
+      } else {
+        av = String(av).toLowerCase();
+        bv = String(bv).toLowerCase();
+      }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return rows;
+  }, [tickets, search, assignedFilter, dateFrom, dateTo, sortKey, sortDir]);
+
+  const assigneeOptions = useMemo(() => {
+    const seen = new Set();
+    return tickets
+      .map((t) => t.assigned_to)
+      .filter((v) => v && !seen.has(v) && seen.add(v))
+      .sort();
+  }, [tickets]);
+
+  const hasFilters = search || assignedFilter || dateFrom || dateTo;
+
   return (
     <div style={styles.page}>
+      {/* Header */}
       <div style={styles.header}>
-        <h2>Tickets</h2>
+        <h2 style={{ margin: 0 }}>Tickets</h2>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select style={styles.select} value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="">All</option>
+          <select style={styles.select} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">All statuses</option>
             <option value="open">Open</option>
             <option value="in_progress">In Progress</option>
             <option value="closed">Closed</option>
@@ -52,16 +132,64 @@ export default function Tickets() {
         </div>
       </div>
 
+      {/* Filter bar */}
+      <div style={styles.filterBar}>
+        <div style={styles.filterGroup}>
+          <label style={styles.filterLabel}>Search</label>
+          <input
+            style={{ ...styles.filterInput, width: 200 }}
+            placeholder="Machine ID or title…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div style={styles.filterGroup}>
+          <label style={styles.filterLabel}>Assigned To</label>
+          <select style={styles.filterInput} value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
+            <option value="">Anyone</option>
+            {assigneeOptions.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+        </div>
+        <div style={styles.filterGroup}>
+          <label style={styles.filterLabel}>From</label>
+          <input type="date" style={styles.filterInput} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        </div>
+        <div style={styles.filterGroup}>
+          <label style={styles.filterLabel}>To</label>
+          <input type="date" style={styles.filterInput} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </div>
+        {hasFilters && (
+          <button
+            style={styles.btnClear}
+            onClick={() => { setSearch(""); setAssignedFilter(""); setDateFrom(""); setDateTo(""); }}
+          >
+            Clear
+          </button>
+        )}
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#999", alignSelf: "flex-end", paddingBottom: 2 }}>
+          {displayed.length} ticket{displayed.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {/* Table */}
       <table style={styles.table}>
         <thead>
           <tr>
-            {["Machine ID", "Title", "Assigned To", "Priority", "Status", "Created"].map((h) => (
-              <th key={h} style={styles.th}>{h}</th>
+            {COLUMNS.map(({ key, label }) => (
+              <th
+                key={key}
+                style={{ ...styles.th, cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}
+                onClick={() => toggleSort(key)}
+              >
+                {label}<SortIcon active={sortKey === key} dir={sortDir} />
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {tickets.map((t) => (
+          {displayed.map((t) => (
             <tr key={t._id} style={styles.tr}>
               <td style={styles.td}><code style={{ fontSize: 12 }}>{t.machine_id}</code></td>
               <td style={styles.td}>
@@ -71,16 +199,14 @@ export default function Tickets() {
               <td style={styles.td}><PriorityBadge priority={t.priority} /></td>
               <td style={styles.td}><StatusBadge status={t.status} /></td>
               <td style={styles.td}>
-                {t.created_at
-                  ? new Date(t.created_at).toLocaleDateString()
-                  : "—"}
+                {t.created_at ? new Date(t.created_at).toLocaleDateString() : "—"}
               </td>
             </tr>
           ))}
-          {tickets.length === 0 && (
+          {displayed.length === 0 && (
             <tr>
               <td colSpan={6} style={{ ...styles.td, textAlign: "center", color: "#999", padding: 32 }}>
-                No tickets found.
+                No tickets match your filters.
               </td>
             </tr>
           )}
@@ -107,7 +233,7 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
     assigned_to: "",
     priority: 1,
   });
-  const [steps, setSteps] = useState([{ label: "", completion_type: "confirmation" }]);
+  const [steps, setSteps] = useState([{ id: crypto.randomUUID(), label: "", completion_type: "confirmation" }]);
   const [photos, setPhotos] = useState([]);
   const [photoPreviews, setPhotoPreviews] = useState([]);
   const fileInputRef = useRef(null);
@@ -133,18 +259,6 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
     setForm((f) => ({ ...f, [field]: val }));
   }
 
-  function addStep() {
-    setSteps((s) => [...s, { label: "", completion_type: "confirmation" }]);
-  }
-
-  function removeStep(i) {
-    setSteps((s) => s.filter((_, idx) => idx !== i));
-  }
-
-  function updateStep(i, field, val) {
-    setSteps((s) => s.map((step, idx) => (idx === i ? { ...step, [field]: val } : step)));
-  }
-
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
@@ -162,10 +276,10 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
         ...form,
         assigned_to: form.assigned_to || null,
         priority: parseInt(form.priority, 10) || 1,
-        steps: steps.map((s, i) => ({
+        steps: steps.map(({ id, ...rest }, i) => ({
           step_index: i,
-          label: s.label.trim(),
-          completion_type: s.completion_type,
+          label: rest.label.trim(),
+          completion_type: rest.completion_type,
           completed: false,
         })),
       });
@@ -286,31 +400,11 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
           </div>
 
           <div style={{ marginTop: 4 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <strong style={{ fontSize: 14 }}>Steps</strong>
-              <button type="button" onClick={addStep} style={modal.btnAdd}>+ Add Step</button>
-            </div>
-            {steps.map((step, i) => (
-              <div key={i} style={modal.stepRow}>
-                <span style={modal.stepNum}>{i + 1}.</span>
-                <input
-                  style={{ ...modal.input, flex: 1 }}
-                  placeholder="Step description"
-                  value={step.label}
-                  onChange={(e) => updateStep(i, "label", e.target.value)}
-                />
-                <select
-                  style={{ ...modal.input, width: "auto" }}
-                  value={step.completion_type}
-                  onChange={(e) => updateStep(i, "completion_type", e.target.value)}
-                >
-                  {COMPLETION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-                {steps.length > 1 && (
-                  <button type="button" onClick={() => removeStep(i)} style={modal.btnRemove}>✕</button>
-                )}
-              </div>
-            ))}
+            <StepEditor
+              items={steps}
+              onChange={setSteps}
+              label="Steps"
+            />
           </div>
 
           {error && <p style={{ color: "#e53935", marginTop: 12, fontSize: 13 }}>{error}</p>}
@@ -343,9 +437,14 @@ function PriorityBadge({ priority }) {
 
 const styles = {
   page: { padding: 32 },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   select: { padding: "6px 10px", borderRadius: 4, border: "1px solid #ddd" },
   btnCreate: { background: "#1a1a2e", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 4, cursor: "pointer", fontWeight: "bold" },
+  filterBar: { display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px 16px", marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,.05)" },
+  filterGroup: { display: "flex", flexDirection: "column", gap: 3 },
+  filterLabel: { fontSize: 11, color: "#888", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" },
+  filterInput: { padding: "6px 10px", border: "1px solid #ddd", borderRadius: 4, fontSize: 13 },
+  btnClear: { alignSelf: "flex-end", background: "none", border: "1px solid #ddd", color: "#666", padding: "6px 12px", borderRadius: 4, cursor: "pointer", fontSize: 12 },
   table: { width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 8, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,.08)" },
   th: { background: "#f5f5f5", padding: "10px 14px", textAlign: "left", fontSize: 13, color: "#666" },
   td: { padding: "10px 14px", borderBottom: "1px solid #f0f0f0", fontSize: 14 },

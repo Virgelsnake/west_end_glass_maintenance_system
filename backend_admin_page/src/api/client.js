@@ -18,18 +18,24 @@ client.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle auth errors
+// Handle auth errors (401 Unauthorized and 403 Forbidden)
 client.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
-      const url = err.config?.url || "";
+    const status = err.response?.status;
+    const url = err.config?.url || "";
+    
+    // Handle both 401 (token invalid/expired) and 403 (access denied)
+    if (status === 401 || status === 403) {
       if (url.startsWith("/tech")) {
         localStorage.removeItem("tech_token");
         localStorage.removeItem("tech_user");
         window.location.href = "/tech/login";
       } else {
         localStorage.removeItem("access_token");
+        localStorage.removeItem("admin_username");
+        localStorage.removeItem("admin_role");
+        localStorage.removeItem("admin_full_name");
         window.location.href = "/login";
       }
     }

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import client from "../api/client";
 import { toast } from "sonner";
@@ -115,11 +116,13 @@ export default function Machines() {
 
 function MachineCard({ machine: m, openCount, waNumber }) {
   const [copied, setCopied] = useState(false);
+  const navigate = useNavigate();
   const waLink = waNumber
     ? `https://wa.me/${waNumber}?text=${encodeURIComponent(m.machine_id)}`
     : null;
 
-  function copyLink() {
+  function copyLink(e) {
+    e.stopPropagation();
     if (!waLink) return;
     navigator.clipboard.writeText(waLink).then(() => {
       setCopied(true);
@@ -129,7 +132,10 @@ function MachineCard({ machine: m, openCount, waNumber }) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 flex flex-col gap-2 hover:shadow-md transition-shadow">
+    <div
+      className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 flex flex-col gap-2 hover:shadow-md transition-shadow cursor-pointer"
+      onClick={() => navigate(`/tickets?machine=${encodeURIComponent(m.machine_id)}`)}
+    >
       <div className="flex items-start justify-between">
         <code className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
           {m.machine_id}

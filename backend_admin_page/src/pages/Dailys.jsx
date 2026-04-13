@@ -4,10 +4,11 @@ import client from "../api/client";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import {
-  Plus, Pencil, Trash2, Play, ChevronUp, ChevronDown,
+  Plus, Pencil, Trash2, Play,
   Loader2, X, CalendarClock, AlertCircle, Clock, User,
   ToggleLeft, ToggleRight,
 } from "lucide-react";
+import StepEditor from "../components/StepEditor";
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 export const getDailys = () => client.get("/dailys");
@@ -15,8 +16,6 @@ export const createDaily = (data) => client.post("/dailys", data);
 export const updateDaily = (id, data) => client.patch(`/dailys/${id}`, data);
 export const deleteDaily = (id) => client.delete(`/dailys/${id}`);
 export const triggerDaily = (id) => client.post(`/dailys/${id}/trigger`);
-
-const COMPLETION_TYPES = ["confirmation", "note", "photo", "manual"];
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function Dailys() {
@@ -273,11 +272,11 @@ function TemplateModal({ template, machines, users, onSave, onClose }) {
   const [scheduleTime, setScheduleTime] = useState(template?.schedule_time || "00:00");
   const [active, setActive] = useState(template?.active ?? true);
   const [items, setItems] = useState(
-    template?.items ? template.items.map((i) => ({ ...i })) : []
+    template?.items
+      ? template.items.map((i) => ({ ...i, id: crypto.randomUUID() }))
+      : []
   );
   const [saving, setSaving] = useState(false);
-  const [newItemLabel, setNewItemLabel] = useState("");
-  const [newItemSection, setNewItemSection] = useState("General");
 
   // Auto-fill title when machine selected in create mode
   function handleMachineChange(mid) {
@@ -288,38 +287,6 @@ function TemplateModal({ template, machines, users, onSave, onClose }) {
     }
   }
 
-  function moveItem(idx, dir) {
-    const next = [...items];
-    const swap = idx + dir;
-    if (swap < 0 || swap >= next.length) return;
-    [next[idx], next[swap]] = [next[swap], next[idx]];
-    // Re-index
-    next.forEach((item, i) => { item.item_index = i; });
-    setItems(next);
-  }
-
-  function updateItemField(idx, field, value) {
-    const next = [...items];
-    next[idx] = { ...next[idx], [field]: value };
-    setItems(next);
-  }
-
-  function removeItem(idx) {
-    const next = items.filter((_, i) => i !== idx).map((item, i) => ({ ...item, item_index: i }));
-    setItems(next);
-  }
-
-  function addItem() {
-    if (!newItemLabel.trim()) return;
-    setItems([...items, {
-      item_index: items.length,
-      label: newItemLabel.trim(),
-      section_name: newItemSection.trim() || "General",
-      completion_type: "confirmation",
-    }]);
-    setNewItemLabel("");
-  }
-
   async function handleSubmit(e) {
     e.preventDefault();
     if (!machineId || !title || !assignedTo) {
@@ -327,12 +294,10 @@ function TemplateModal({ template, machines, users, onSave, onClose }) {
       return;
     }
     setSaving(true);
-    await onSave({ machine_id: machineId, title, assigned_to: assignedTo, schedule_time: scheduleTime, active, items });
+    const serializedItems = items.map(({ id, ...rest }, i) => ({ ...rest, item_index: i }));
+    await onSave({ machine_id: machineId, title, assigned_to: assignedTo, schedule_time: scheduleTime, active, items: serializedItems });
     setSaving(false);
   }
-
-  // Group items by section for display
-  const sections = [...new Set(items.map((i) => i.section_name))];
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
@@ -419,87 +384,12 @@ function TemplateModal({ template, machines, users, onSave, onClose }) {
             </div>
 
             {/* Items list */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-medium text-slate-600">
-                  Check Items ({items.length})
-                </label>
-              </div>
-
-              {items.length === 0 && (
-                <p className="text-xs text-slate-400 py-2">No items yet. Add items below.</p>
-              )}
-
-              <div className="space-y-1 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
-                {sections.map((section) => (
-                  <div key={section}>
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1 pt-2 pb-1">
-                      {section}
-                    </p>
-                    {items
-                      .map((item, idx) => ({ item, idx }))
-                      .filter(({ item }) => item.section_name === section)
-                      .map(({ item, idx }) => (
-                        <div key={idx} className="flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-1.5 mb-1">
-                          {/* Reorder */}
-                          <div className="flex flex-col">
-                            <button type="button" onClick={() => moveItem(idx, -1)} className="text-slate-300 hover:text-slate-600 leading-none">
-                              <ChevronUp size={12} />
-                            </button>
-                            <button type="button" onClick={() => moveItem(idx, 1)} className="text-slate-300 hover:text-slate-600 leading-none">
-                              <ChevronDown size={12} />
-                            </button>
-                          </div>
-                          {/* Label */}
-                          <input
-                            value={item.label}
-                            onChange={(e) => updateItemField(idx, "label", e.target.value)}
-                            className="flex-1 min-w-0 text-xs bg-transparent focus:outline-none text-slate-700"
-                          />
-                          {/* Completion type */}
-                          <select
-                            value={item.completion_type}
-                            onChange={(e) => updateItemField(idx, "completion_type", e.target.value)}
-                            className="text-xs rounded border border-slate-200 bg-white px-1 py-0.5 text-slate-600 focus:outline-none"
-                          >
-                            {COMPLETION_TYPES.map((ct) => (
-                              <option key={ct} value={ct}>{ct}</option>
-                            ))}
-                          </select>
-                          {/* Delete */}
-                          <button type="button" onClick={() => removeItem(idx)} className="text-slate-300 hover:text-red-500 ml-1">
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-                ))}
-              </div>
-
-              {/* Add item row */}
-              <div className="flex gap-2 mt-2">
-                <input
-                  value={newItemSection}
-                  onChange={(e) => setNewItemSection(e.target.value)}
-                  placeholder="Section"
-                  className="w-32 rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <input
-                  value={newItemLabel}
-                  onChange={(e) => setNewItemLabel(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
-                  placeholder="New check item label…"
-                  className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  type="button"
-                  onClick={addItem}
-                  className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200"
-                >
-                  <Plus size={12} />
-                </button>
-              </div>
-            </div>
+            <StepEditor
+              items={items}
+              onChange={setItems}
+              withSections
+              label="Check Items"
+            />
           </div>
 
           {/* Footer */}
