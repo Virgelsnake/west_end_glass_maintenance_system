@@ -36,8 +36,12 @@ export default function Tickets() {
 
   async function load() {
     const params = statusFilter ? `?status=${statusFilter}` : "";
-    const res = await client.get(`/tickets${params}`);
-    setTickets(res.data);
+    const [tRes, uRes] = await Promise.all([
+      client.get(`/tickets${params}`),
+      client.get("/users"),
+    ]);
+    setTickets(tRes.data);
+    setUsers(uRes.data);
   }
 
   async function openCreate() {
@@ -106,6 +110,13 @@ export default function Tickets() {
     return rows;
   }, [tickets, search, assignedFilter, dateFrom, dateTo, sortKey, sortDir]);
 
+  // phone number → display name lookup
+  const userMap = useMemo(() => {
+    const map = {};
+    users.forEach((u) => { map[u.phone_number] = u.name; });
+    return map;
+  }, [users]);
+
   const assigneeOptions = useMemo(() => {
     const seen = new Set();
     return tickets
@@ -148,7 +159,7 @@ export default function Tickets() {
           <select style={styles.filterInput} value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
             <option value="">Anyone</option>
             {assigneeOptions.map((a) => (
-              <option key={a} value={a}>{a}</option>
+              <option key={a} value={a}>{userMap[a] || a}</option>
             ))}
           </select>
         </div>
@@ -195,7 +206,7 @@ export default function Tickets() {
               <td style={styles.td}>
                 <Link to={`/tickets/${t._id}`} style={{ color: "#1976d2" }}>{t.title}</Link>
               </td>
-              <td style={styles.td}>{t.assigned_to || "—"}</td>
+              <td style={styles.td}>{t.assigned_to ? (userMap[t.assigned_to] || t.assigned_to) : "—"}</td>
               <td style={styles.td}><PriorityBadge priority={t.priority} /></td>
               <td style={styles.td}><StatusBadge status={t.status} /></td>
               <td style={styles.td}>
