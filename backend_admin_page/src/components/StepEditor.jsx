@@ -173,8 +173,7 @@ export default function StepEditor({
     onChange([...items, newItem]);
     setNewLabel("");
     setNewType("confirmation");
-    setShowAttachmentModal"");
-    setNewSendViaWa(false);
+    setShowAttachmentModal(false);
   }
 
   return (
