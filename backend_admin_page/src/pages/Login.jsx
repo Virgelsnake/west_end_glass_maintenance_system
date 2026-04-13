@@ -89,6 +89,13 @@ export default function Login() {
             Access the field portal →
           </a>
         </p>
+        {import.meta.env.VITE_APP_VERSION && (
+          <p className="mt-3 text-center" style={{color: 'rgba(255,255,255,0.25)', fontSize: 10, letterSpacing: '0.05em'}}>
+            v{import.meta.env.VITE_APP_VERSION.split('+')[0]}
+            &nbsp;&middot;&nbsp;
+            {import.meta.env.VITE_APP_VERSION.split('+')[1]?.slice(0, 7)}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -119,7 +119,7 @@ def build_ticket_detail_card(ticket: dict) -> dict:
     """
     ticket_id = str(ticket["_id"])
     title = ticket.get("title", "Untitled")
-    machine_id = ticket.get("machine_id", "Unknown")
+    display_id = ticket.get("machine_id") or ticket.get("ticket_type_id") or "General"
     description = ticket.get("description") or ""
     steps = ticket.get("steps", [])
     completed = sum(1 for s in steps if s.get("completed"))
@@ -127,7 +127,10 @@ def build_ticket_detail_card(ticket: dict) -> dict:
     priority = ticket.get("priority", 0)
     badge = _priority_badge(priority)
 
-    body_parts = [f"*{title}*", f"Machine: {machine_id}  {badge}"]
+    label = "Machine" if ticket.get("machine_id") else "Type"
+    body_parts = [f"*{title}*", f"{label}: {display_id}  {badge}"]
+    if ticket.get("location"):
+        body_parts.append(f"Location: {ticket['location']}")
     if description:
         body_parts.append(f"\n{description}")
     body_parts.append(f"\nProgress: {completed} of {total} steps complete")
@@ -282,7 +285,8 @@ def build_all_tickets_list(tickets: list) -> dict:
     from collections import defaultdict
     by_machine: dict[str, list] = defaultdict(list)
     for t in tickets:
-        by_machine[t.get("machine_id", "Unassigned")].append(t)
+        key = t.get("machine_id") or t.get("ticket_type_id") or "General"
+        by_machine[key].append(t)
 
     sections = []
     row_count = 0
@@ -384,7 +388,7 @@ async def handle_interactive(
         ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
         if ticket is None:
             return {"action": "send_text", "text": "Ticket not found. Please contact your supervisor."}
-        machine_id = ticket.get("machine_id", "")
+        machine_id = ticket.get("machine_id") or ""
         await db.tickets.update_one(
             {"_id": ObjectId(ticket_id)},
             {"$set": {"status": "in_progress"}},
