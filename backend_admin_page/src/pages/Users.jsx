@@ -5,7 +5,7 @@ import client from "../api/client";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import {
-  Plus, Search, KeyRound, AlertCircle, Loader2, X, Phone,
+  Plus, Search, AlertCircle, Loader2, X, Phone,
   ToggleLeft, ToggleRight, Ticket,
 } from "lucide-react";
 
@@ -141,10 +141,10 @@ export default function Users() {
               {(role === "super_admin" || role === "dispatcher") && (
                 <div className="flex gap-2 pt-1 border-t border-slate-50">
                   <button
-                    onClick={() => setPinTarget(u)}
+                    onClick={() => navigate(`/tickets?assigned_to=${encodeURIComponent(u.phone_number)}`)}
                     className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
                   >
-                    <KeyRound size={12} /> Set PIN
+                    <Ticket size={12} /> Show Tickets
                   </button>
                   <button
                     onClick={() => toggleActive(u)}

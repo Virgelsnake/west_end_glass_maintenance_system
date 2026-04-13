@@ -16,7 +16,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, X, FileText } from "lucide-react";
 import client from "../api/client";
 
-const COMPLETION_TYPES = ["confirmation", "note", "photo", "manual"];
+const COMPLETION_TYPES = ["confirmation", "note", "photo", "attachment"];
 
 // ── Single sortable row ───────────────────────────────────────────────────────
 function StepRow({ item, withSections, onUpdate, onRemove }) {
@@ -77,12 +77,12 @@ function StepRow({ item, withSections, onUpdate, onRemove }) {
       </select>
 
       {/* Manual doc badge */}
-      {item.completion_type === "manual" && item.manual_title && (
+      {item.completion_type === "attachment" && item.manual_title && (
         <span className="flex items-center gap-0.5 text-[10px] text-blue-600 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 shrink-0 max-w-[100px] truncate" title={item.manual_title}>
           <FileText size={10} />{item.manual_title}
         </span>
       )}
-      {item.completion_type === "manual" && item.send_manual_via_whatsapp && (
+      {item.completion_type === "attachment" && item.send_manual_via_whatsapp && (
         <span className="text-[10px] text-green-600 bg-green-50 border border-green-200 rounded px-1.5 py-0.5 shrink-0">WA</span>
       )}
 
@@ -146,13 +146,13 @@ export default function StepEditor({
 
   function addItem() {
     if (!newLabel.trim()) return;
-    const foundManual = newType === "manual" ? manuals.find((m) => m._id === newManualId) : null;
+    const foundManual = newType === "attachment" ? manuals.find((m) => m._id === newManualId) : null;
     const newItem = {
       id: crypto.randomUUID(),
       label: newLabel.trim(),
       completion_type: newType,
       ...(withSections ? { section_name: "" } : {}),
-      ...(newType === "manual" ? {
+      ...(newType === "attachment" ? {
         manual_id: newManualId || null,
         manual_title: foundManual?.title || null,
         send_manual_via_whatsapp: newSendViaWa,
@@ -198,14 +198,14 @@ export default function StepEditor({
             <option key={ct} value={ct}>{ct}</option>
           ))}
         </select>
-        {newType === "manual" && (
+        {newType === "attachment" && (
           <>
             <select
               value={newManualId}
               onChange={(e) => setNewManualId(e.target.value)}
               className="text-xs rounded-lg border border-slate-300 bg-white px-1.5 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0 max-w-[140px]"
             >
-              <option value="">— pick document —</option>
+              <option value="">— pick attachment —</option>
               {manuals.map((m) => (
                 <option key={m._id} value={m._id}>{m.title}</option>
               ))}
