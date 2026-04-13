@@ -15,6 +15,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, X, FileText } from "lucide-react";
 import client from "../api/client";
+import AttachmentModal from "./AttachmentModal";
 
 const COMPLETION_TYPES = ["confirmation", "note", "photo", "attachment"];
 
@@ -118,6 +119,7 @@ export default function StepEditor({
   const [newType, setNewType] = useState("confirmation");
   const [manuals, setManuals] = useState([]);
   const [newManualId, setNewManualId] = useState("");
+  const [showAttachmentModal, setShowAttachmentModal] = useState(false);
   const [newSendViaWa, setNewSendViaWa] = useState(false);
 
   useEffect(() => {
@@ -145,23 +147,32 @@ export default function StepEditor({
   }
 
   function addItem() {
-    if (!newLabel.trim()) return;
-    const foundManual = newType === "attachment" ? manuals.find((m) => m._id === newManualId) : null;
-    const newItem = {
+    if (!nnewItem = {
       id: crypto.randomUUID(),
       label: newLabel.trim(),
       completion_type: newType,
       ...(withSections ? { section_name: "" } : {}),
-      ...(newType === "attachment" ? {
-        manual_id: newManualId || null,
-        manual_title: foundManual?.title || null,
-        send_manual_via_whatsapp: newSendViaWa,
-      } : {}),
     };
     onChange([...items, newItem]);
     setNewLabel("");
     setNewType("confirmation");
-    setNewManualId("");
+  }
+
+  function handleAttachmentSelect(attachment) {
+    if (!newLabel.trim()) return;
+    const newItem = {
+      id: crypto.randomUUID(),
+      label: newLabel.trim(),
+      completion_type: "attachment",
+      ...(withSections ? { section_name: "" } : {}),
+      manual_id: attachment.manual_id,
+      manual_title: attachment.manual_title,
+      send_manual_via_whatsapp: attachment.send_manual_via_whatsapp,
+    };
+    onChange([...items, newItem]);
+    setNewLabel("");
+    setNewType("confirmation");
+    setShowAttachmentModal"");
     setNewSendViaWa(false);
   }
 
@@ -191,7 +202,7 @@ export default function StepEditor({
         />
         <select
           value={newType}
-          onChange={(e) => { setNewType(e.target.value); setNewManualId(""); setNewSendViaWa(false); }}
+          onChange={(e) => { setNewType(e.target.value); }}
           className="text-xs rounded-lg border border-slate-300 bg-white px-1.5 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0"
         >
           {COMPLETION_TYPES.map((ct) => (
@@ -199,31 +210,23 @@ export default function StepEditor({
           ))}
         </select>
         {newType === "attachment" && (
-          <>
-            <select
-              value={newManualId}
-              onChange={(e) => setNewManualId(e.target.value)}
-              className="text-xs rounded-lg border border-slate-300 bg-white px-1.5 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0 max-w-[140px]"
-            >
-              <option value="">— pick attachment —</option>
-              {manuals.map((m) => (
-                <option key={m._id} value={m._id}>{m.title}</option>
-              ))}
-            </select>
-            <label className="flex items-center gap-1 text-xs text-slate-600 shrink-0 whitespace-nowrap">
-              <input
-                type="checkbox"
-                checked={newSendViaWa}
-                onChange={(e) => setNewSendViaWa(e.target.checked)}
-                className="rounded"
-              />
-              Send via WA
-            </label>
-          </>
+          <button
+            type="button"
+            onClick={() => setShowAttachmentModal(true)}
+            className="flex items-center gap-1 rounded-lg bg-purple-50 border border-purple-200 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 shrink-0"
+          >
+            <FileText size={12} /> Pick Attachment
+          </button>
         )}
         <button
           type="button"
-          onClick={addItem}
+          onClick={() => {
+            if (newType === "attachment") {
+              setShowAttachmentModal(true);
+            } else {
+              addItem();
+            }
+          }}
           title="Add item"
           className="flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
         >
@@ -257,6 +260,13 @@ export default function StepEditor({
           </DndContext>
         </div>
       )}
+
+      <AttachmentModal
+        isOpen={showAttachmentModal}
+        manuals={manuals}
+        onConfirm={handleAttachmentSelect}
+        onClose={() => setShowAttachmentModal(false)}
+      />
     </div>
   );
 }

@@ -380,7 +380,7 @@ function StepsTab({ steps }) {
                   &ldquo;{step.note_text}&rdquo;
                 </span>
               )}
-              {step.completion_type === "manual" && step.manual_id && (
+              {step.completion_type === "attachment" && step.manual_id && (
                 <a
                   href={`${API_BASE}/manuals/${step.manual_id}/file`}
                   target="_blank"

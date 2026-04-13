@@ -483,17 +483,17 @@ function CreateTicketModal({ machines, users, ticketTypes, onSave, onClose }) {
 
           <div style={{ marginTop: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <strong style={{ fontSize: 14 }}>Reference Photos</strong>
+              <strong style={{ fontSize: 14 }}>Reference Documents</strong>
               {photos.length < 5 && (
                 <button type="button" onClick={() => fileInputRef.current?.click()} style={modal.btnAdd}>
-                  + Add Photo
+                  + Add Document
                 </button>
               )}
             </div>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*"
               multiple
               style={{ display: "none" }}
               onChange={handlePhotoChange}
@@ -514,11 +514,11 @@ function CreateTicketModal({ machines, users, ticketTypes, onSave, onClose }) {
                 ))}
               </div>
             ) : (
-              <p style={{ fontSize: 12, color: "#999", marginBottom: 12 }}>No photos attached (max 5).</p>
+              <p style={{ fontSize: 12, color: "#999", marginBottom: 12 }}>No documents attached (max 5).</p>
             )}
             {form.assigned_to && photos.length > 0 && (
               <p style={{ fontSize: 12, color: "#2196f3", marginBottom: 10 }}>
-                📲 Will send {photos.length} photo{photos.length > 1 ? "s" : ""} to assigned technician via WhatsApp.
+                📲 Will send {photos.length} document{photos.length > 1 ? "s" : ""} to assigned technician via WhatsApp.
               </p>
             )}
           </div>
