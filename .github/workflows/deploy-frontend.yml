@@ -33,6 +33,7 @@ jobs:
         working-directory: backend_admin_page
         env:
           VITE_API_BASE_URL: https://api.westend.customertest.digitalbullet.net
+          VITE_APP_VERSION: "1.0.${{ github.run_number }}+${{ github.sha }}"
         run: npm run build
 
       - name: Configure AWS credentials
@@ -52,6 +53,38 @@ jobs:
           aws s3 cp backend_admin_page/dist/index.html \
             s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/index.html \
             --cache-control "no-cache, no-store, must-revalidate"
+
+      - name: Configure CloudFront SPA error responses
+        # Ensures 403/404 from S3 serve index.html (HTTP 200) so React Router
+        # handles deep-links and browser refreshes instead of showing an S3 XML error.
+        # Idempotent: safe to run on every deploy.
+        run: |
+          DIST_ID=${{ env.CLOUDFRONT_DISTRIBUTION_ID }}
+
+          # Fetch current config + ETag (required for the update call)
+          RESPONSE=$(aws cloudfront get-distribution-config --id "$DIST_ID")
+          ETAG=$(echo "$RESPONSE" | jq -r '.ETag')
+          CURRENT=$(echo "$RESPONSE" | jq '.DistributionConfig')
+
+          # Merge: remove any existing 403/404 entries, then add the correct ones
+          UPDATED=$(echo "$CURRENT" | jq '
+            .CustomErrorResponses.Items = (
+              ((.CustomErrorResponses.Items // []) | map(select(.ErrorCode != 403 and .ErrorCode != 404)))
+              + [
+                  {"ErrorCode": 403, "ResponsePagePath": "/index.html", "ResponseCode": "200", "ErrorCachingMinTTL": 0},
+                  {"ErrorCode": 404, "ResponsePagePath": "/index.html", "ResponseCode": "200", "ErrorCachingMinTTL": 0}
+                ]
+            ) |
+            .CustomErrorResponses.Quantity = (.CustomErrorResponses.Items | length)
+          ')
+
+          aws cloudfront update-distribution \
+            --id "$DIST_ID" \
+            --distribution-config "$UPDATED" \
+            --if-match "$ETAG" \
+            --output json > /dev/null
+
+          echo "CloudFront error responses configured."
 
       - name: Invalidate CloudFront
         run: |
