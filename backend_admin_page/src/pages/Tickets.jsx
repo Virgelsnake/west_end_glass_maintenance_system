@@ -23,7 +23,7 @@ export default function Tickets() {
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "");
   const [search, setSearch] = useState(searchParams.get("machine") || "");
-  const [assignedFilter, setAssignedFilter] = useState("");
+  const [assignedFilter, setAssignedFilter] = useState(searchParams.get("assigned_to") || "");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sortKey, setSortKey] = useState("priority");

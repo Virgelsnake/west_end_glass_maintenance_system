@@ -1,15 +1,17 @@
 import { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import client from "../api/client";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import {
   Plus, Search, KeyRound, AlertCircle, Loader2, X, Phone,
-  ToggleLeft, ToggleRight,
+  ToggleLeft, ToggleRight, Ticket,
 } from "lucide-react";
 
 export default function Users() {
   const { role } = useAuth();
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -108,7 +110,12 @@ export default function Users() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {filtered.map((u) => (
             <div key={u.phone_number} className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 flex flex-col gap-3">
-              <div className="flex items-start justify-between">
+              <button
+                className="flex items-start justify-between text-left w-full hover:opacity-80 transition-opacity"
+                onClick={() => navigate(`/tickets?assigned_to=${encodeURIComponent(u.phone_number)}`)}
+                title="View tickets for this technician"
+                aria-label={`View tickets for ${u.name}`}
+              >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700">
                     {u.name?.[0]?.toUpperCase() || "?"}
@@ -120,14 +127,17 @@ export default function Users() {
                     </p>
                   </div>
                 </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                    u.active !== false ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {u.active !== false ? "Active" : "Inactive"}
-                </span>
-              </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      u.active !== false ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {u.active !== false ? "Active" : "Inactive"}
+                  </span>
+                  <Ticket size={14} className="text-slate-400" aria-hidden="true" />
+                </div>
+              </button>
               {(role === "super_admin" || role === "dispatcher") && (
                 <div className="flex gap-2 pt-1 border-t border-slate-50">
                   <button
