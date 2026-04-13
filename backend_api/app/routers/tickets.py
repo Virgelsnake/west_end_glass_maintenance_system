@@ -68,6 +68,16 @@ async def create_ticket(ticket: TicketCreate, current_admin: dict = Depends(get_
             logger.info("Assignment notification sent to %s for new ticket", ticket.assigned_to)
         except Exception as exc:
             logger.warning("WhatsApp assignment notification failed on creation: %s", exc, exc_info=True)
+
+        try:
+            await wa_service.send_start_ticket_button(
+                to=ticket.assigned_to,
+                ticket_id=ticket_id,
+                ticket_title=ticket.title,
+                machine_id=ticket.machine_id,
+            )
+        except Exception as exc:
+            logger.warning("Start-ticket button failed on creation: %s", exc)
     
     return {**doc, "_id": ticket_id}
 
@@ -127,6 +137,16 @@ async def update_ticket(
             logger.info("Assignment notification sent to %s", new_assigned)
         except Exception as exc:
             logger.warning("WhatsApp assignment notification failed: %s", exc, exc_info=True)
+
+        try:
+            await wa_service.send_start_ticket_button(
+                to=new_assigned,
+                ticket_id=ticket_id,
+                ticket_title=ticket.get("title", ""),
+                machine_id=ticket.get("machine_id", ""),
+            )
+        except Exception as exc:
+            logger.warning("Start-ticket button failed on update: %s", exc)
 
     return {"updated": True}
 

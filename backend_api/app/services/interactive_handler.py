@@ -67,6 +67,9 @@ def parse_reply_id(reply_id: str) -> dict:
         if action == "select" and len(parts) >= 3:
             return {"action": "ticket_select", "ticket_id": parts[2]}
 
+        if action == "start" and len(parts) >= 3:
+            return {"action": "ticket_start", "ticket_id": parts[2]}
+
         if action == "close" and len(parts) >= 3:
             return {"action": "ticket_close", "ticket_id": parts[2]}
 
@@ -233,6 +236,27 @@ async def handle_interactive(
     parsed = parse_reply_id(reply_id)
     action = parsed.get("action", "unknown")
     logger.info("Interactive action=%s parsed=%s", action, parsed)
+
+    # ── ticket_start: tech tapped 'Start Ticket' button ─────────────────────
+    if action == "ticket_start":
+        ticket_id = parsed["ticket_id"]
+        ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
+        if ticket is None:
+            return {"action": "send_text", "text": "Ticket not found. Please contact your supervisor."}
+        machine_id = ticket.get("machine_id", "")
+        await db.tickets.update_one(
+            {"_id": ObjectId(ticket_id)},
+            {"$set": {"status": "in_progress"}},
+        )
+        await db.users.update_one(
+            {"phone_number": phone_number},
+            {"$set": {"active_ticket_id": ticket_id, "active_machine_id": machine_id}},
+        )
+        return {
+            "action": "route_to_claude",
+            "message_text": "I'm starting this ticket now.",
+            "ticket_id": ticket_id,
+        }
 
     # ── ticket_select: tech picked a ticket from the list ─────────────────────
     if action == "ticket_select":
