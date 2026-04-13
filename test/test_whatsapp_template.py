@@ -8,7 +8,7 @@ Usage (from project root):
     python test/test_whatsapp_template.py --to +447717207677
 
     # Or with a custom template:
-    python test/test_whatsapp_template.py --to +447717207677 --template test_maintenance_chat --lang en_US
+    python test/test_whatsapp_template.py --to +447717207677 --template westend_glass__machine_servicing_system --lang en_US
 
 Reads credentials from  ../backend_api/.env  (no running server required).
 Requires:  pip install httpx python-dotenv

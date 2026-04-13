@@ -135,7 +135,7 @@ async def send_ticket_assignment_notification(
         "to": to,
         "type": "template",
         "template": {
-            "name": "test_maintenance_chat",
+            "name": "westend_glass__machine_servicing_system",
             "language": {"code": "en_US"},
             "components": [
                 {
@@ -143,7 +143,6 @@ async def send_ticket_assignment_notification(
                     "parameters": [
                         {"type": "text", "text": tech_name},
                         {"type": "text", "text": now},
-                        {"type": "text", "text": ticket_title},
                         {"type": "text", "text": machine_id},
                     ],
                 }
