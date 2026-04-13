@@ -36,25 +36,33 @@ export default function Tickets() {
   useEffect(() => { load(); }, [statusFilter]);
 
   async function load() {
-    const params = statusFilter ? `?status=${statusFilter}` : "";
-    const [tRes, uRes] = await Promise.all([
-      client.get(`/tickets${params}`),
-      client.get("/users"),
-    ]);
-    setTickets(tRes.data);
-    setUsers(uRes.data);
+    try {
+      const params = statusFilter ? `?status=${statusFilter}` : "";
+      const [tRes, uRes] = await Promise.all([
+        client.get(`/tickets${params}`),
+        client.get("/users"),
+      ]);
+      setTickets(tRes.data);
+      setUsers(uRes.data);
+    } catch {
+      // ignore — client interceptor handles auth errors; network blips are silent
+    }
   }
 
   async function openCreate() {
-    const [mRes, uRes, ttRes] = await Promise.all([
-      client.get("/machines"),
-      client.get("/users"),
-      client.get("/ticket-types"),
-    ]);
-    setMachines(mRes.data);
-    setUsers(uRes.data.filter((u) => u.active));
-    setTicketTypes(ttRes.data);
-    setShowCreate(true);
+    try {
+      const [mRes, uRes, ttRes] = await Promise.allSettled([
+        client.get("/machines"),
+        client.get("/users"),
+        client.get("/ticket-types"),
+      ]);
+      setMachines(mRes.status === "fulfilled" ? mRes.value.data : []);
+      setUsers(uRes.status === "fulfilled" ? uRes.value.data.filter((u) => u.active) : []);
+      setTicketTypes(ttRes.status === "fulfilled" ? ttRes.value.data : []);
+      setShowCreate(true);
+    } catch {
+      setShowCreate(true);
+    }
   }
 
   function handleCreate() {
