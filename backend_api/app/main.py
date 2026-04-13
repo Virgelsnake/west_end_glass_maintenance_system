@@ -17,6 +17,8 @@ from .routers import (
 )
 from .routers import admins, tech_auth, tech_tickets, dashboard
 from .routers import dailys
+from .routers import manuals
+from .routers import ticket_types
 from .services import daily_scheduler
 
 app = FastAPI(
@@ -110,6 +112,8 @@ app.include_router(tech_auth.router)
 app.include_router(tech_tickets.router)
 app.include_router(dashboard.router)
 app.include_router(dailys.router)
+app.include_router(manuals.router)
+app.include_router(ticket_types.router)
 
 
 @app.get("/settings/public", tags=["settings"])

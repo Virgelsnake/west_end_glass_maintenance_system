@@ -12,6 +12,8 @@ import Machines from "./pages/Machines";
 import AuditLog from "./pages/AuditLog";
 import Admins from "./pages/Admins";
 import Dailys from "./pages/Dailys";
+import Files from "./pages/Files";
+import SettingsPage from "./pages/SettingsPage";
 import TechLogin from "./pages/tech/TechLogin";
 import TechTicketList from "./pages/tech/TechTicketList";
 import TechTicketDetail from "./pages/tech/TechTicketDetail";
@@ -34,6 +36,8 @@ export default function App() {
             <Route path="/users" element={<Users />} />
             <Route path="/machines" element={<Machines />} />
             <Route path="/dailys" element={<Dailys />} />
+            <Route path="/files" element={<Files />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route
               path="/admin/admins"

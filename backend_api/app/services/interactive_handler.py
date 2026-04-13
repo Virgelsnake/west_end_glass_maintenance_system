@@ -10,12 +10,15 @@ Claude is only called for free text, help requests, and edge cases.
 
 Button ID convention (underscore-delimited, no spaces):
   ticket_select_{ticket_id}            — tap from ticket list picker
-  step_done_{ticket_id}_{step_index}   — confirm step complete
-  step_issue_{ticket_id}_{step_index}  — flag an issue on a step
-  step_note_{ticket_id}_{step_index}_{slug} — preset note (normal/low/critical)
+  ticket_start_{ticket_id}             — tap "Begin Steps" on detail card
   ticket_close_{ticket_id}             — close ticket after all steps done
   ticket_review_{ticket_id}            — review all steps (routes to Claude)
+  ticket_restart_{ticket_id}           — re-present step 1 buttons
   ticket_switch_{machine_id}           — switch ticket on current machine
+  step_done_{ticket_id}_{step_index}   — confirm step complete
+  step_issue_{ticket_id}_{step_index}  — flag an issue on a step
+  tech_my_tickets                      — show all tickets assigned to this tech
+  menu_open_{ticket_id}                — open the in-step navigation menu
 
 Return value from handle_interactive():
   {"action": "send_buttons",  "body": str, "buttons": [...]}
@@ -33,12 +36,8 @@ logger = logging.getLogger("interactive_handler")
 # Priority badge for list display
 PRIORITY_BADGE = {1: "P1 🔴", 2: "P2 🟡", 3: "P3 🟢"}
 
-# Preset note slugs → display text saved to DB
-NOTE_SLUG_MAP = {
-    "normal":   "Normal",
-    "low":      "Low",
-    "critical": "CRITICAL — immediate attention required",
-}
+def _priority_badge(priority: int) -> str:
+    return PRIORITY_BADGE.get(priority, f"P{priority}")
 
 
 # ── ID parsing ────────────────────────────────────────────────────────────────
@@ -50,17 +49,23 @@ def parse_reply_id(reply_id: str) -> dict:
     Examples:
       "step_done_abc123_0"          → {"action": "step_done", "ticket_id": "abc123", "step_index": 0}
       "ticket_select_abc123"        → {"action": "ticket_select", "ticket_id": "abc123"}
-      "step_note_abc123_2_low"      → {"action": "step_note", "ticket_id": "abc123", "step_index": 2, "slug": "low"}
       "ticket_close_abc123"         → {"action": "ticket_close", "ticket_id": "abc123"}
       "ticket_switch_WEG-ARRISOR-01" → {"action": "ticket_switch", "machine_id": "WEG-ARRISOR-01"}
+      "tech_my_tickets"             → {"action": "tech_my_tickets"}
+      "menu_open_abc123"            → {"action": "menu_open", "ticket_id": "abc123"}
+      "ticket_restart_abc123"       → {"action": "ticket_restart", "ticket_id": "abc123"}
     """
+    # Exact matches first
+    if reply_id == "tech_my_tickets":
+        return {"action": "tech_my_tickets"}
+
     parts = reply_id.split("_", 3)  # at most 4 parts
 
     if len(parts) < 2:
         return {"action": "unknown"}
 
-    prefix = parts[0]   # "ticket" or "step"
-    action = parts[1]   # "select", "done", "issue", "note", "close", "review", "switch"
+    prefix = parts[0]   # "ticket", "step", "menu", or "tech"
+    action = parts[1]   # "select", "done", "issue", "close", "review", "switch", "open", etc.
 
     # ── ticket_* actions ─────────────────────────────────────────────────────
     if prefix == "ticket":
@@ -75,6 +80,9 @@ def parse_reply_id(reply_id: str) -> dict:
 
         if action == "review" and len(parts) >= 3:
             return {"action": "ticket_review", "ticket_id": parts[2]}
+
+        if action == "restart" and len(parts) >= 3:
+            return {"action": "ticket_restart", "ticket_id": parts[2]}
 
         if action == "switch" and len(parts) >= 3:
             # machine_id may contain hyphens — rejoin everything after "switch_"
@@ -94,37 +102,58 @@ def parse_reply_id(reply_id: str) -> dict:
                 "step_index": step_index,
             }
 
-        if action == "note" and len(parts) >= 4:
-            # parts[3] is "{step_index}_{slug}" — split once more
-            remainder = parts[3].split("_", 1)
-            if len(remainder) < 2:
-                return {"action": "unknown"}
-            try:
-                step_index = int(remainder[0])
-            except ValueError:
-                return {"action": "unknown"}
-            slug = remainder[1]
-            return {
-                "action": "step_note",
-                "ticket_id": parts[2],
-                "step_index": step_index,
-                "slug": slug,
-            }
+    # ── menu_* actions ────────────────────────────────────────────────────────
+    elif prefix == "menu":
+        if action == "open" and len(parts) >= 3:
+            return {"action": "menu_open", "ticket_id": parts[2]}
 
     return {"action": "unknown"}
 
 
 # ── Payload builders ─────────────────────────────────────────────────────────
 
+def build_ticket_detail_card(ticket: dict) -> dict:
+    """
+    Build a ticket detail card with Begin Steps + My Tickets buttons.
+    Shows the full description — no truncation.
+    """
+    ticket_id = str(ticket["_id"])
+    title = ticket.get("title", "Untitled")
+    machine_id = ticket.get("machine_id", "Unknown")
+    description = ticket.get("description") or ""
+    steps = ticket.get("steps", [])
+    completed = sum(1 for s in steps if s.get("completed"))
+    total = len(steps)
+    priority = ticket.get("priority", 0)
+    badge = _priority_badge(priority)
+
+    body_parts = [f"*{title}*", f"Machine: {machine_id}  {badge}"]
+    if description:
+        body_parts.append(f"\n{description}")
+    body_parts.append(f"\nProgress: {completed} of {total} steps complete")
+    body = "\n".join(body_parts)[:1024]  # Meta body limit
+
+    return {
+        "type": "buttons",
+        "body": body,
+        "buttons": [
+            {"id": f"ticket_start_{ticket_id}", "title": "Begin Steps"},
+            {"id": "tech_my_tickets",           "title": "My Tickets"},
+        ],
+    }
+
+
 def build_step_buttons(ticket: dict) -> dict | None:
     """
     Build an interactive button payload for the next incomplete step.
     Returns None if all steps are complete (caller should offer close-ticket buttons).
 
-    For photo steps: returns a plain text dict instead (no buttons needed — tech
-    sends the photo directly).
+    Confirmation/manual steps: Done / Report Issue / Menu  (3 buttons)
+    Note steps: plain text prompt only — tech types in the chat box
+    Photo steps: plain text prompt only — tech sends a photo
     """
     ticket_id = str(ticket["_id"])
+    total = len(ticket.get("steps", []))
 
     for step in ticket.get("steps", []):
         if step.get("completed", False):
@@ -135,40 +164,36 @@ def build_step_buttons(ticket: dict) -> dict | None:
         ctype = step.get("completion_type", "confirmation")
 
         if ctype == "photo":
-            # No interactive buttons — just a text prompt
             return {
                 "type": "text",
-                "text": f"📷 Step {idx + 1}: {label}\n\nJust send a photo — no need to type anything.",
+                "text": f"📷 Step {idx + 1} of {total}: {label}\n\nJust send a photo — no need to type anything.",
+            }
+
+        if ctype == "note":
+            return {
+                "type": "text",
+                "text": f"Step {idx + 1} of {total}: {label}\n\nType your note below ↓",
             }
 
         if ctype in ("confirmation", "manual"):
             return {
                 "type": "buttons",
-                "body": f"Step {idx + 1} of {len(ticket['steps'])}: {label}",
+                "body": f"Step {idx + 1} of {total}: {label}",
                 "buttons": [
-                    {"id": f"step_done_{ticket_id}_{idx}", "title": "Done"},
+                    {"id": f"step_done_{ticket_id}_{idx}",  "title": "Done"},
                     {"id": f"step_issue_{ticket_id}_{idx}", "title": "Report Issue"},
+                    {"id": f"menu_open_{ticket_id}",        "title": "Menu"},
                 ],
             }
 
-        if ctype == "note":
-            return {
-                "type": "buttons",
-                "body": f"Step {idx + 1} of {len(ticket['steps'])}: {label}\n\n(Or type a custom note)",
-                "buttons": [
-                    {"id": f"step_note_{ticket_id}_{idx}_normal",   "title": "Normal"},
-                    {"id": f"step_note_{ticket_id}_{idx}_low",      "title": "Low"},
-                    {"id": f"step_note_{ticket_id}_{idx}_critical", "title": "Critical"},
-                ],
-            }
-
-        # Unknown type — fallback to done/issue buttons
+        # Unknown type — fallback to done/issue/menu
         return {
             "type": "buttons",
-            "body": f"Step {idx + 1}: {label}",
+            "body": f"Step {idx + 1} of {total}: {label}",
             "buttons": [
-                {"id": f"step_done_{ticket_id}_{idx}", "title": "Done"},
+                {"id": f"step_done_{ticket_id}_{idx}",  "title": "Done"},
                 {"id": f"step_issue_{ticket_id}_{idx}", "title": "Report Issue"},
+                {"id": f"menu_open_{ticket_id}",        "title": "Menu"},
             ],
         }
 
@@ -186,33 +211,105 @@ def build_close_ticket_buttons(ticket: dict) -> dict:
         "buttons": [
             {"id": f"ticket_close_{ticket_id}",  "title": "Close Ticket"},
             {"id": f"ticket_review_{ticket_id}", "title": "Review Steps"},
+            {"id": "tech_my_tickets",             "title": "My Tickets"},
+        ],
+    }
+
+
+def build_menu_list(ticket_id: str) -> dict:
+    """Build the in-step navigation menu list picker."""
+    return {
+        "type": "list",
+        "body": "What would you like to do?",
+        "button_label": "Options",
+        "sections": [
+            {
+                "title": "NAVIGATION",
+                "rows": [
+                    {
+                        "id": "tech_my_tickets",
+                        "title": "My Other Tickets",
+                        "description": "See all your assigned tickets",
+                    },
+                    {
+                        "id": f"ticket_review_{ticket_id}",
+                        "title": "View Progress",
+                        "description": "See what's been completed so far",
+                    },
+                    {
+                        "id": f"ticket_restart_{ticket_id}",
+                        "title": "Back to Start",
+                        "description": "Go back to the first step of this ticket",
+                    },
+                ],
+            }
         ],
     }
 
 
 def build_ticket_list(machine_id: str, tickets: list) -> dict:
     """
-    Build an interactive list picker payload for a machine's open tickets.
-    Truncates title to 24 chars (Meta limit).
+    Build an interactive list picker for a machine's open tickets.
+    Title = priority badge (≤24 chars), description = full ticket title + status (≤72 chars).
     """
     rows = []
-    for t in tickets[:10]:  # Meta max 10 rows
+    for t in tickets[:10]:  # Meta max 10 rows per section
         tid = str(t["_id"])
-        priority = t.get("priority", 3)
-        badge = PRIORITY_BADGE.get(priority, "")
-        title = t.get("title", "Untitled")[:24]
+        priority = t.get("priority", 0)
+        badge = _priority_badge(priority)
+        title_text = t.get("title", "Untitled")
         status = t.get("status", "open")
         rows.append({
             "id": f"ticket_select_{tid}",
-            "title": title,
-            "description": f"{badge} · {status}",
+            "title": badge[:24],
+            "description": f"{title_text[:60]} · {status}",
         })
 
     return {
         "type": "list",
         "body": f"Open tickets for {machine_id} — tap to select one:",
         "button_label": "View Tickets",
-        "sections": [{"title": machine_id, "rows": rows}],
+        "sections": [{"title": machine_id[:24], "rows": rows}],
+    }
+
+
+def build_all_tickets_list(tickets: list) -> dict:
+    """
+    Build an interactive list picker for ALL tickets assigned to a tech,
+    grouped by machine (one section per machine, max 10 rows total).
+    """
+    # Group by machine, preserving priority sort order
+    from collections import defaultdict
+    by_machine: dict[str, list] = defaultdict(list)
+    for t in tickets:
+        by_machine[t.get("machine_id", "Unassigned")].append(t)
+
+    sections = []
+    row_count = 0
+    for machine_id, machine_tickets in by_machine.items():
+        rows = []
+        for t in machine_tickets:
+            if row_count >= 10:
+                break
+            tid = str(t["_id"])
+            priority = t.get("priority", 0)
+            badge = _priority_badge(priority)
+            title_text = t.get("title", "Untitled")
+            status = t.get("status", "open")
+            rows.append({
+                "id": f"ticket_select_{tid}",
+                "title": badge[:24],
+                "description": f"{title_text[:50]} · {machine_id}",
+            })
+            row_count += 1
+        if rows:
+            sections.append({"title": machine_id[:24], "rows": rows})
+
+    return {
+        "type": "list",
+        "body": "Your open tickets — tap one to open it:",
+        "button_label": "My Tickets",
+        "sections": sections,
     }
 
 
@@ -237,7 +334,51 @@ async def handle_interactive(
     action = parsed.get("action", "unknown")
     logger.info("Interactive action=%s parsed=%s", action, parsed)
 
-    # ── ticket_start: tech tapped 'Start Ticket' button ─────────────────────
+    # ── tech_my_tickets: show all assigned tickets across machines ────────────
+    if action == "tech_my_tickets":
+        tickets = await ticket_service.get_open_tickets_for_phone(db, phone_number)
+        # Clear active ticket so next selection starts fresh
+        await db.users.update_one(
+            {"phone_number": phone_number},
+            {"$set": {"active_ticket_id": None}},
+        )
+        if not tickets:
+            return {"action": "send_text", "text": "You have no open tickets right now. Great work! 🎉"}
+        if len(tickets) == 1:
+            # Only one ticket — show its detail card directly
+            ticket = tickets[0]
+            await db.users.update_one(
+                {"phone_number": phone_number},
+                {"$set": {"active_ticket_id": str(ticket["_id"]), "active_machine_id": ticket.get("machine_id")}},
+            )
+            payload = build_ticket_detail_card(ticket)
+            return {"action": "send_buttons", "body": payload["body"], "buttons": payload["buttons"]}
+        payload = build_all_tickets_list(tickets)
+        return {
+            "action": "send_list",
+            "body": payload["body"],
+            "button_label": payload["button_label"],
+            "sections": payload["sections"],
+        }
+
+    # ── ticket_select: tech picked a ticket from any list ────────────────────
+    if action == "ticket_select":
+        ticket_id = parsed["ticket_id"]
+        ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
+        if ticket is None:
+            return {"action": "send_text", "text": "Ticket not found. Please contact your supervisor."}
+        await db.users.update_one(
+            {"phone_number": phone_number},
+            {"$set": {
+                "active_ticket_id": ticket_id,
+                "active_machine_id": ticket.get("machine_id"),
+            }},
+        )
+        # Show detail card before starting
+        payload = build_ticket_detail_card(ticket)
+        return {"action": "send_buttons", "body": payload["body"], "buttons": payload["buttons"]}
+
+    # ── ticket_start: tech tapped "Begin Steps" on detail card ───────────────
     if action == "ticket_start":
         ticket_id = parsed["ticket_id"]
         ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
@@ -252,24 +393,58 @@ async def handle_interactive(
             {"phone_number": phone_number},
             {"$set": {"active_ticket_id": ticket_id, "active_machine_id": machine_id}},
         )
+        # Reload and send first step directly — no Claude needed
+        ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
+        step_payload = build_step_buttons(ticket)
+        if step_payload is None:
+            payload = build_close_ticket_buttons(ticket)
+        else:
+            payload = step_payload
+        if payload["type"] == "text":
+            return {"action": "send_text", "text": payload["text"]}
+        return {"action": "send_buttons", "body": payload["body"], "buttons": payload["buttons"]}
+
+    # ── ticket_restart: re-present the first step buttons ────────────────────
+    elif action == "ticket_restart":
+        ticket_id = parsed["ticket_id"]
+        ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
+        if ticket is None:
+            return {"action": "send_text", "text": "Ticket not found."}
+        # Reset to first step in display only — find step 0 regardless of completed state
+        steps = ticket.get("steps", [])
+        if not steps:
+            return {"action": "send_text", "text": "This ticket has no steps."}
+        first = steps[0]
+        idx = first["step_index"]
+        label = first["label"]
+        ctype = first.get("completion_type", "confirmation")
+        total = len(steps)
+        completed = sum(1 for s in steps if s.get("completed"))
+        ticket_id_str = str(ticket["_id"])
+        header = f"Back to step 1 ({completed}/{total} steps already done).\n\n"
+        if ctype == "photo":
+            return {"action": "send_text", "text": f"{header}📷 Step 1 of {total}: {label}\n\nJust send a photo."}
+        if ctype == "note":
+            return {"action": "send_text", "text": f"{header}Step 1 of {total}: {label}\n\nType your note below ↓"}
         return {
-            "action": "route_to_claude",
-            "message_text": "I'm starting this ticket now.",
-            "ticket_id": ticket_id,
+            "action": "send_buttons",
+            "body": f"{header}Step 1 of {total}: {label}",
+            "buttons": [
+                {"id": f"step_done_{ticket_id_str}_{idx}",  "title": "Done"},
+                {"id": f"step_issue_{ticket_id_str}_{idx}", "title": "Report Issue"},
+                {"id": f"menu_open_{ticket_id_str}",        "title": "Menu"},
+            ],
         }
 
-    # ── ticket_select: tech picked a ticket from the list ─────────────────────
-    if action == "ticket_select":
+    # ── menu_open: show navigation menu list ─────────────────────────────────
+    elif action == "menu_open":
         ticket_id = parsed["ticket_id"]
-        await db.users.update_one(
-            {"phone_number": phone_number},
-            {"$set": {"active_ticket_id": ticket_id}},
-        )
-        # Route to Claude to greet the ticket and present first step
+        payload = build_menu_list(ticket_id)
         return {
-            "action": "route_to_claude",
-            "message_text": f"Starting on: {reply_title}",
-            "ticket_id": ticket_id,
+            "action": "send_list",
+            "body": payload["body"],
+            "button_label": payload["button_label"],
+            "sections": payload["sections"],
         }
 
     # ── step_done: tech confirmed a step ─────────────────────────────────────
@@ -285,7 +460,6 @@ async def handle_interactive(
         next_payload = build_step_buttons(ticket)
 
         if next_payload is None:
-            # All steps done — offer close
             payload = build_close_ticket_buttons(ticket)
         else:
             payload = next_payload
@@ -294,11 +468,11 @@ async def handle_interactive(
         total = len(ticket.get("steps", []))
 
         if payload["type"] == "text":
-            return {"action": "send_text", "text": payload["text"]}
+            return {"action": "send_text", "text": f"✅ Step {step_index + 1} done ({step_count}/{total}).\n\n{payload['text']}"}
 
         return {
             "action": "send_buttons",
-            "body": f"Step {step_index + 1} done ({step_count}/{total} complete).\n\n{payload['body']}",
+            "body": f"✅ Step {step_index + 1} done ({step_count}/{total} complete).\n\n{payload['body']}",
             "buttons": payload["buttons"],
         }
 
@@ -319,34 +493,6 @@ async def handle_interactive(
             "ticket_id": ticket_id,
         }
 
-    # ── step_note: tech tapped a preset note value ────────────────────────────
-    elif action == "step_note":
-        ticket_id = parsed["ticket_id"]
-        step_index = parsed["step_index"]
-        slug = parsed.get("slug", "normal")
-        note_text = NOTE_SLUG_MAP.get(slug, slug.capitalize())
-
-        ticket = await ticket_service.attach_note_to_step(db, ticket_id, step_index, note_text, phone_number)
-        if ticket is None:
-            return {"action": "send_text", "text": "Could not save note. Please try again."}
-
-        ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
-        next_payload = build_step_buttons(ticket)
-
-        if next_payload is None:
-            payload = build_close_ticket_buttons(ticket)
-        else:
-            payload = next_payload
-
-        if payload["type"] == "text":
-            return {"action": "send_text", "text": f"Note saved: {note_text}\n\n{payload['text']}"}
-
-        return {
-            "action": "send_buttons",
-            "body": f"Note saved: {note_text}\n\n{payload['body']}",
-            "buttons": payload["buttons"],
-        }
-
     # ── ticket_close: tech confirmed close ────────────────────────────────────
     elif action == "ticket_close":
         ticket_id = parsed["ticket_id"]
@@ -362,26 +508,38 @@ async def handle_interactive(
             remaining = await ticket_service.get_open_tickets_for_machine(db, machine_id)
             if remaining:
                 if len(remaining) == 1:
-                    # Auto-select the only remaining ticket and route to Claude
+                    ticket = remaining[0]
                     await db.users.update_one(
                         {"phone_number": phone_number},
-                        {"$set": {"active_ticket_id": str(remaining[0]["_id"])}},
+                        {"$set": {"active_ticket_id": str(ticket["_id"])}},
                     )
+                    payload = build_ticket_detail_card(ticket)
                     return {
-                        "action": "route_to_claude",
-                        "message_text": f"Starting on: {remaining[0]['title']}",
-                        "ticket_id": str(remaining[0]["_id"]),
+                        "action": "send_buttons",
+                        "body": f"Ticket closed. 1 ticket still open on {machine_id}:\n\n{payload['body']}",
+                        "buttons": payload["buttons"],
                     }
                 else:
                     list_payload = build_ticket_list(machine_id, remaining)
                     return {
                         "action": "send_list",
-                        "body": f"Ticket closed. {len(remaining)} ticket(s) still open on {machine_id}:",
+                        "body": f"Ticket closed. {len(remaining)} tickets still open on {machine_id}:",
                         "button_label": list_payload["button_label"],
                         "sections": list_payload["sections"],
                     }
 
-        return {"action": "send_text", "text": "Ticket closed. No more open tickets. Great work!"}
+        # No remaining tickets for this machine — check all assigned tickets
+        all_remaining = await ticket_service.get_open_tickets_for_phone(db, phone_number)
+        if all_remaining:
+            payload = build_all_tickets_list(all_remaining)
+            return {
+                "action": "send_list",
+                "body": f"Ticket closed. You still have {len(all_remaining)} open ticket(s):",
+                "button_label": payload["button_label"],
+                "sections": payload["sections"],
+            }
+
+        return {"action": "send_text", "text": "Ticket closed. No more open tickets. Great work! 🎉"}
 
     # ── ticket_review: show all steps — route to Claude ──────────────────────
     elif action == "ticket_review":
@@ -392,7 +550,7 @@ async def handle_interactive(
             "ticket_id": ticket_id,
         }
 
-    # ── ticket_switch: tech wants to change ticket ────────────────────────────
+    # ── ticket_switch: tech wants to change ticket (legacy) ──────────────────
     elif action == "ticket_switch":
         machine_id = parsed["machine_id"]
         tickets = await ticket_service.get_open_tickets_for_machine(db, machine_id)
@@ -403,15 +561,13 @@ async def handle_interactive(
         if not tickets:
             return {"action": "send_text", "text": f"No open tickets for {machine_id}."}
         if len(tickets) == 1:
+            ticket = tickets[0]
             await db.users.update_one(
                 {"phone_number": phone_number},
-                {"$set": {"active_ticket_id": str(tickets[0]["_id"])}},
+                {"$set": {"active_ticket_id": str(ticket["_id"])}},
             )
-            return {
-                "action": "route_to_claude",
-                "message_text": f"Starting on: {tickets[0]['title']}",
-                "ticket_id": str(tickets[0]["_id"]),
-            }
+            payload = build_ticket_detail_card(ticket)
+            return {"action": "send_buttons", "body": payload["body"], "buttons": payload["buttons"]}
         list_payload = build_ticket_list(machine_id, tickets)
         return {
             "action": "send_list",

@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     # File storage
     photo_storage_path: str = "/data/photos"
+    manual_storage_path: str = "/data/manuals"
 
     # CORS
     cors_origins: str = "http://localhost:3000"

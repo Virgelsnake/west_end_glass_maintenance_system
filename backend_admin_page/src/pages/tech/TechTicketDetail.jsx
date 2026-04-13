@@ -4,7 +4,7 @@ import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import client from "../../api/client";
 import { toast } from "sonner";
 import {
-  ArrowLeft, CheckCircle2, Circle, Loader2, Camera, FileText, AlertCircle,
+  ArrowLeft, CheckCircle2, Circle, Loader2, Camera, FileText, AlertCircle, Download,
 } from "lucide-react";
 import { format, isPast } from "date-fns";
 
@@ -74,6 +74,20 @@ export default function TechTicketDetail() {
     }
   }
 
+  async function downloadManual(manualId, filename) {
+    try {
+      const res = await client.get(`/manuals/tech/${manualId}/file`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "document";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download document");
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-svh bg-slate-50 flex items-center justify-center">
@@ -106,7 +120,9 @@ export default function TechTicketDetail() {
         </Link>
         <h1 className="text-white font-bold text-base leading-snug line-clamp-2">{ticket.title}</h1>
         <div className="flex items-center gap-2 mt-1.5">
-          <code className="rounded bg-slate-700 px-1.5 py-0.5 text-xs text-slate-300">{ticket.machine_id}</code>
+          <code className="rounded bg-slate-700 px-1.5 py-0.5 text-xs text-slate-300">
+            {ticket.machine_id || ticket.location || "—"}
+          </code>
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[ticket.status]}`}>
             {ticket.status?.replace("_", " ")}
           </span>
@@ -173,6 +189,15 @@ export default function TechTicketDetail() {
                   <p className="text-xs text-slate-400 capitalize mt-0.5">{step.completion_type?.replace("_", " ")}</p>
                   {step.note && (
                     <p className="text-xs text-blue-600 mt-1 italic">&ldquo;{step.note}&rdquo;</p>
+                  )}
+                  {step.completion_type === "manual" && step.manual_id && (
+                    <button
+                      onClick={() => downloadManual(step.manual_id, step.manual_title)}
+                      className="mt-1.5 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      <Download size={11} />
+                      {step.manual_title || "Download Reference Document"}
+                    </button>
                   )}
                 </div>
                 {!step.completed && (

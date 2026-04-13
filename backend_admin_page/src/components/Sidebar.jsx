@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   LayoutDashboard, Ticket, Users, Cpu, ScrollText,
-  LogOut, ShieldCheck, X, CalendarClock,
+  LogOut, ShieldCheck, X, CalendarClock, FileText, Settings,
 } from "lucide-react";
 
 const ROLE_COLORS = {
@@ -23,6 +23,8 @@ const NAV = [
   { to: "/users", icon: Users, label: "Technicians" },
   { to: "/machines", icon: Cpu, label: "Machines" },
   { to: "/dailys", icon: CalendarClock, label: "Daily Checks" },
+  { to: "/files", icon: FileText, label: "Files" },
+  { to: "/settings", icon: Settings, label: "Settings" },
   { to: "/audit", icon: ScrollText, label: "Audit Log" },
 ];
 

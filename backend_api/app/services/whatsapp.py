@@ -238,3 +238,29 @@ async def send_interactive_list(to: str, body_text: str, button_label: str, sect
                 f"Meta interactive list API error: HTTP {resp.status_code} — {resp.text}"
             )
         return resp.json()
+
+
+async def send_document(to: str, file_path: str, filename: str, caption: str = "") -> None:
+    """Upload a local document file to WhatsApp and send it to the recipient."""
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(file_path)
+    mime_type = mime_type or "application/octet-stream"
+    with open(file_path, "rb") as f:
+        file_bytes = f.read()
+    media_id = await upload_media(file_bytes, mime_type, filename)
+
+    url = f"{WHATSAPP_API_BASE}/{settings.meta_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {settings.meta_whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "document",
+        "document": {"id": media_id, "filename": filename, "caption": caption},
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code >= 400:
+            raise Exception(f"Meta document API error: HTTP {resp.status_code} — {resp.text}")

@@ -56,13 +56,14 @@ async def create_ticket(ticket: TicketCreate, current_admin: dict = Depends(get_
     
     # Send WhatsApp assignment notification if ticket was assigned at creation
     if ticket.assigned_to:
+        display_id = ticket.machine_id or ticket.ticket_type_id or "General"
         try:
             tech = await db.users.find_one({"phone_number": ticket.assigned_to})
             tech_name = tech["name"] if tech else ticket.assigned_to
             await wa_service.send_ticket_assignment_notification(
                 to=ticket.assigned_to,
                 tech_name=tech_name,
-                machine_id=ticket.machine_id,
+                machine_id=display_id,
                 ticket_title=ticket.title,
             )
             logger.info("Assignment notification sent to %s for new ticket", ticket.assigned_to)
@@ -74,7 +75,7 @@ async def create_ticket(ticket: TicketCreate, current_admin: dict = Depends(get_
                 to=ticket.assigned_to,
                 ticket_id=ticket_id,
                 ticket_title=ticket.title,
-                machine_id=ticket.machine_id,
+                machine_id=display_id,
             )
         except Exception as exc:
             logger.warning("Start-ticket button failed on creation: %s", exc)
@@ -125,13 +126,14 @@ async def update_ticket(
     # Send WhatsApp assignment notification if tech was newly assigned
     new_assigned = changes.get("assigned_to")
     if new_assigned and new_assigned != old_assigned:
+        display_id = ticket.get("machine_id") or ticket.get("ticket_type_id") or "General"
         try:
             tech = await db.users.find_one({"phone_number": new_assigned})
             tech_name = tech["name"] if tech else new_assigned
             await wa_service.send_ticket_assignment_notification(
                 to=new_assigned,
                 tech_name=tech_name,
-                machine_id=ticket.get("machine_id", ""),
+                machine_id=display_id,
                 ticket_title=ticket.get("title", ""),
             )
             logger.info("Assignment notification sent to %s", new_assigned)
@@ -143,7 +145,7 @@ async def update_ticket(
                 to=new_assigned,
                 ticket_id=ticket_id,
                 ticket_title=ticket.get("title", ""),
-                machine_id=ticket.get("machine_id", ""),
+                machine_id=display_id,
             )
         except Exception as exc:
             logger.warning("Start-ticket button failed on update: %s", exc)

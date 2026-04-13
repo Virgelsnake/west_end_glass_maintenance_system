@@ -218,7 +218,7 @@ async def _execute_tool(
         tickets = await ticket_service.get_open_tickets_for_phone(db, tool_input["phone_number"])
         if not tickets:
             return "No open tickets found for this technician."
-        lines = [f"- {t['machine_id']}: {t['title']}" for t in tickets]
+        lines = [f"- {t.get('machine_id') or t.get('ticket_type_id') or 'General'}: {t['title']}" for t in tickets]
         return "Open tickets:\n" + "\n".join(lines)
 
     elif tool_name == "switch_ticket":
@@ -339,9 +339,10 @@ async def run_agent_loop(
         return f"Test mode: Note saved for step {step_index}: \"{note_text}\""
 
     # ── Normal message processing ─────────────────────────────────────
+    display_id = ticket.get("machine_id") or ticket.get("ticket_type_id") or "General"
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
         ticket_id=ticket_id,
-        machine_id=ticket["machine_id"],
+        machine_id=display_id,
         title=ticket["title"],
         technician_name=technician_name,
         technician_phone=user["phone_number"],
@@ -389,9 +390,10 @@ async def run_agent_loop(
                 ticket_id = str(ticket["_id"])
         else:
             ticket = await db.tickets.find_one({"_id": ticket["_id"]})
+        display_id = ticket.get("machine_id") or ticket.get("ticket_type_id") or "General"
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             ticket_id=ticket_id,
-            machine_id=ticket["machine_id"],
+            machine_id=display_id,
             title=ticket["title"],
             technician_name=technician_name,
             technician_phone=user["phone_number"],

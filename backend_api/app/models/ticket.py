@@ -15,10 +15,15 @@ class TicketStep(BaseModel):
     completed_by: Optional[str] = None  # phone number or "admin"
     note_text: Optional[str] = None
     photo_path: Optional[str] = None
+    manual_id: Optional[str] = None           # links to manuals collection
+    manual_title: Optional[str] = None        # stored for display without extra lookup
+    send_manual_via_whatsapp: bool = False     # Code Path B: proactively push doc via WA
+    manual_doc_sent: bool = False              # prevents duplicate WA doc sends
 
 
 class TicketBase(BaseModel):
-    machine_id: str
+    machine_id: Optional[str] = None          # None for non-machine ticket types
+    ticket_type_id: Optional[str] = None      # links to ticket_types collection
     title: str
     description: Optional[str] = None
     steps: List[TicketStep] = []
@@ -28,6 +33,10 @@ class TicketBase(BaseModel):
     due_date: Optional[datetime] = None
     category: Optional[TicketCategory] = None
     reference_photos: List[str] = []  # filenames of admin-attached reference images
+    location: Optional[str] = None            # for non-machine ticket types
+    contact_name: Optional[str] = None
+    contact_number: Optional[str] = None
+    contact_address: Optional[str] = None
 
 
 class TicketCreate(TicketBase):
@@ -44,6 +53,10 @@ class TicketUpdate(BaseModel):
     due_date: Optional[datetime] = None
     category: Optional[TicketCategory] = None
     status: Optional[Literal["open", "in_progress", "closed"]] = None
+    location: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_number: Optional[str] = None
+    contact_address: Optional[str] = None
 
 
 class TicketInDB(TicketBase):

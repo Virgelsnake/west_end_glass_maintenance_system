@@ -346,9 +346,9 @@ function StepsTab({ steps }) {
               <span className="text-xs text-slate-400 capitalize">
                 {step.completion_type?.replace("_", " ")}
               </span>
-              {step.note && (
+              {step.note_text && (
                 <span className="text-xs text-blue-600 italic">
-                  &ldquo;{step.note}&rdquo;
+                  &ldquo;{step.note_text}&rdquo;
                 </span>
               )}
             </div>
@@ -392,9 +392,9 @@ function MessagesTab({ messages, users }) {
                     : "text-slate-400"
                 }`}
               >
-                {formatDistanceToNow(new Date(msg.timestamp), {
-                  addSuffix: true,
-                })}
+                {msg.timestamp
+                  ? formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true })
+                  : "unknown time"}
               </p>
             </div>
           </div>
@@ -404,8 +404,39 @@ function MessagesTab({ messages, users }) {
   );
 }
 
+function Lightbox({ src, onClose }) {
+  useEffect(() => {
+    if (!src) return;
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [src, onClose]);
+
+  if (!src) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white bg-black/40 rounded-full w-9 h-9 flex items-center justify-center text-lg hover:bg-black/70"
+      >
+        ✕
+      </button>
+      <img
+        src={src}
+        alt="Enlarged"
+        className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
 function PhotosTab({ ticketId, ticket }) {
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const [lightboxSrc, setLightboxSrc] = useState(null);
 
   const refPhotos = (ticket?.reference_photos || []).map((filename) => ({
     filename,
@@ -426,25 +457,25 @@ function PhotosTab({ ticketId, ticket }) {
 
   return (
     <div className="space-y-6">
+      <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
       {refPhotos.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
             Reference Photos
           </h4>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {refPhotos.map((p, i) => (
-              <a
+              <button
                 key={i}
-                href={p.url}
-                target="_blank"
-                rel="noreferrer"
-                className="relative rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity"
+                type="button"
+                onClick={() => setLightboxSrc(p.url)}
+                className="relative rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
-                <img src={p.url} alt={`Reference ${i + 1}`} className="w-full h-28 object-cover" />
+                <img src={p.url} alt={`Reference ${i + 1}`} className="w-full h-56 object-cover" />
                 <span className="absolute top-1 left-1 bg-blue-600 text-white text-xs font-bold px-1.5 py-0.5 rounded">
                   REF
                 </span>
-              </a>
+              </button>
             ))}
           </div>
         </div>
@@ -454,18 +485,17 @@ function PhotosTab({ ticketId, ticket }) {
           <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
             Step Photos
           </h4>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {stepPhotos.map((p, i) => (
-              <a
+              <button
                 key={i}
-                href={p.url}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity block"
+                type="button"
+                onClick={() => setLightboxSrc(p.url)}
+                className="rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity text-left w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
-                <img src={p.url} alt={`Step ${p.stepIndex}`} className="w-full h-28 object-cover" />
+                <img src={p.url} alt={`Step ${p.stepIndex}`} className="w-full h-56 object-cover" />
                 <div className="px-1.5 py-1 text-xs text-slate-500 truncate">{p.label}</div>
-              </a>
+              </button>
             ))}
           </div>
         </div>

@@ -114,6 +114,40 @@ async def receive_webhook(request: Request):
                 return {"status": "ok"}
 
             logger.info("Interactive reply — id=%s title=%s", reply_id, reply_title)
+
+            # ── Template quick-reply buttons (Confirm / Speak to manager) ────
+            # These arrive with the raw button text as reply_id (not our structured IDs)
+            if reply_title.strip().lower() == "confirm":
+                # Tech confirmed assignment — look up their active ticket and show detail card
+                user = await db.users.find_one({"phone_number": phone_number, "active": True})
+                ticket = None
+                if user and user.get("active_ticket_id"):
+                    tid = user["active_ticket_id"]
+                    if ObjectId.is_valid(str(tid)):
+                        ticket = await db.tickets.find_one({"_id": ObjectId(str(tid))})
+                if ticket is None:
+                    # Fall back to most recent assigned open ticket
+                    ticket = await db.tickets.find_one(
+                        {"assigned_to": phone_number, "status": {"$in": ["open", "in_progress"]}},
+                        sort=[("priority", -1), ("created_at", 1)],
+                    )
+                if ticket:
+                    payload = interactive_handler.build_ticket_detail_card(ticket)
+                    await _send_interactive_payload(phone_number, payload)
+                else:
+                    await wa_service.send_text_message(
+                        phone_number,
+                        "You don't have any open tickets right now. Contact your supervisor if you think this is a mistake."
+                    )
+                return {"status": "ok"}
+
+            if reply_title.strip().lower() == "speak to manager":
+                await wa_service.send_text_message(
+                    phone_number,
+                    "Your message has been noted. A supervisor will be in touch shortly. Reply here at any time to continue working on your tickets."
+                )
+                return {"status": "ok"}
+
             ih_result = await interactive_handler.handle_interactive(db, phone_number, reply_id, reply_title)
             await _dispatch_interactive_result(phone_number, ih_result, db)
             return {"status": "ok"}

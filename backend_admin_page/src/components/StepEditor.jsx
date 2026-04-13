@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   DndContext,
   closestCenter,
@@ -13,7 +13,8 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, X } from "lucide-react";
+import { GripVertical, Plus, X, FileText } from "lucide-react";
+import client from "../api/client";
 
 const COMPLETION_TYPES = ["confirmation", "note", "photo", "manual"];
 
@@ -75,6 +76,16 @@ function StepRow({ item, withSections, onUpdate, onRemove }) {
         ))}
       </select>
 
+      {/* Manual doc badge */}
+      {item.completion_type === "manual" && item.manual_title && (
+        <span className="flex items-center gap-0.5 text-[10px] text-blue-600 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 shrink-0 max-w-[100px] truncate" title={item.manual_title}>
+          <FileText size={10} />{item.manual_title}
+        </span>
+      )}
+      {item.completion_type === "manual" && item.send_manual_via_whatsapp && (
+        <span className="text-[10px] text-green-600 bg-green-50 border border-green-200 rounded px-1.5 py-0.5 shrink-0">WA</span>
+      )}
+
       {/* Delete */}
       <button
         type="button"
@@ -104,6 +115,14 @@ export default function StepEditor({
   label = "Check Items",
 }) {
   const [newLabel, setNewLabel] = useState("");
+  const [newType, setNewType] = useState("confirmation");
+  const [manuals, setManuals] = useState([]);
+  const [newManualId, setNewManualId] = useState("");
+  const [newSendViaWa, setNewSendViaWa] = useState(false);
+
+  useEffect(() => {
+    client.get("/manuals").then((r) => setManuals(r.data)).catch(() => {});
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -127,14 +146,23 @@ export default function StepEditor({
 
   function addItem() {
     if (!newLabel.trim()) return;
+    const foundManual = newType === "manual" ? manuals.find((m) => m._id === newManualId) : null;
     const newItem = {
       id: crypto.randomUUID(),
       label: newLabel.trim(),
-      completion_type: "confirmation",
-      ...(withSections ? { section_name: "General" } : {}),
+      completion_type: newType,
+      ...(withSections ? { section_name: "" } : {}),
+      ...(newType === "manual" ? {
+        manual_id: newManualId || null,
+        manual_title: foundManual?.title || null,
+        send_manual_via_whatsapp: newSendViaWa,
+      } : {}),
     };
     onChange([...items, newItem]);
     setNewLabel("");
+    setNewType("confirmation");
+    setNewManualId("");
+    setNewSendViaWa(false);
   }
 
   return (
@@ -161,6 +189,38 @@ export default function StepEditor({
           placeholder={withSections ? "New check item label…" : "New step description…"}
           className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        <select
+          value={newType}
+          onChange={(e) => { setNewType(e.target.value); setNewManualId(""); setNewSendViaWa(false); }}
+          className="text-xs rounded-lg border border-slate-300 bg-white px-1.5 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0"
+        >
+          {COMPLETION_TYPES.map((ct) => (
+            <option key={ct} value={ct}>{ct}</option>
+          ))}
+        </select>
+        {newType === "manual" && (
+          <>
+            <select
+              value={newManualId}
+              onChange={(e) => setNewManualId(e.target.value)}
+              className="text-xs rounded-lg border border-slate-300 bg-white px-1.5 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0 max-w-[140px]"
+            >
+              <option value="">— pick document —</option>
+              {manuals.map((m) => (
+                <option key={m._id} value={m._id}>{m.title}</option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1 text-xs text-slate-600 shrink-0 whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={newSendViaWa}
+                onChange={(e) => setNewSendViaWa(e.target.checked)}
+                className="rounded"
+              />
+              Send via WA
+            </label>
+          </>
+        )}
         <button
           type="button"
           onClick={addItem}

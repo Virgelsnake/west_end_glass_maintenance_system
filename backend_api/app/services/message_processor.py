@@ -15,10 +15,12 @@ from datetime import datetime
 from typing import Optional
 
 from bson import ObjectId
+from ..config import settings
 from .ticket_service import get_open_tickets_for_machine
 from .audit_service import log_event
 from . import claude_agent
 from . import interactive_handler
+from . import whatsapp as wa_service
 
 
 async def _set_user_context(db, phone_number: str, **kwargs) -> None:
@@ -289,7 +291,36 @@ async def process_inbound_message(
 
     # ── 8. Reload ticket for fresh status ─────────────────────────
     ticket = await db.tickets.find_one({"_id": ticket["_id"]})
-
+    # ── 8b. Code Path B: send manual document via WhatsApp (once only) ──
+    if ticket and ticket.get("status") != "closed":
+        import os
+        import logging
+        _logger = logging.getLogger("message_processor")
+        for i, step in enumerate(ticket.get("steps", [])):
+            if not step.get("completed", False):
+                if (
+                    step.get("completion_type") == "manual"
+                    and step.get("send_manual_via_whatsapp", False)
+                    and not step.get("manual_doc_sent", False)
+                    and step.get("manual_id")
+                ):
+                    try:
+                        manual = await db.manuals.find_one({"_id": ObjectId(step["manual_id"])})
+                        if manual:
+                            file_path = os.path.join(settings.manual_storage_path, manual["stored_filename"])
+                            await wa_service.send_document(
+                                to=phone_number,
+                                file_path=file_path,
+                                filename=manual["original_filename"],
+                                caption=f"Reference document for step: {step['label']}",
+                            )
+                            await db.tickets.update_one(
+                                {"_id": ticket["_id"], "steps.step_index": step["step_index"]},
+                                {"$set": {"steps.$.manual_doc_sent": True}},
+                            )
+                    except Exception as _exc:
+                        _logger.warning("Failed to send manual document via WA: %s", _exc)
+                break  # only check first incomplete step
     # ── 9. Build follow-up interactive buttons for next step ─────
     # After Claude responds, send interactive step buttons so the tech
     # can tap instead of type for standard confirmation/note steps.

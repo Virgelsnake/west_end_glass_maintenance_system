@@ -31,6 +31,7 @@ export default function Tickets() {
   const [showCreate, setShowCreate] = useState(false);
   const [machines, setMachines] = useState([]);
   const [users, setUsers] = useState([]);
+  const [ticketTypes, setTicketTypes] = useState([]);
 
   useEffect(() => { load(); }, [statusFilter]);
 
@@ -45,12 +46,14 @@ export default function Tickets() {
   }
 
   async function openCreate() {
-    const [mRes, uRes] = await Promise.all([
+    const [mRes, uRes, ttRes] = await Promise.all([
       client.get("/machines"),
       client.get("/users"),
+      client.get("/ticket-types"),
     ]);
     setMachines(mRes.data);
     setUsers(uRes.data.filter((u) => u.active));
+    setTicketTypes(ttRes.data);
     setShowCreate(true);
   }
 
@@ -202,7 +205,7 @@ export default function Tickets() {
         <tbody>
           {displayed.map((t) => (
             <tr key={t._id} style={styles.tr}>
-              <td style={styles.td}><code style={{ fontSize: 12 }}>{t.machine_id}</code></td>
+              <td style={styles.td}><code style={{ fontSize: 12 }}>{t.machine_id || t.location || "—"}</code></td>
               <td style={styles.td}>
                 <Link to={`/tickets/${t._id}`} style={{ color: "#1976d2" }}>{t.title}</Link>
               </td>
@@ -228,6 +231,7 @@ export default function Tickets() {
         <CreateTicketModal
           machines={machines}
           users={users}
+          ticketTypes={ticketTypes}
           onSave={handleCreate}
           onClose={() => setShowCreate(false)}
         />
@@ -236,15 +240,21 @@ export default function Tickets() {
   );
 }
 
-function CreateTicketModal({ machines, users, onSave, onClose }) {
+function CreateTicketModal({ machines, users, ticketTypes, onSave, onClose }) {
+  const [ticketKind, setTicketKind] = useState("machine");
   const [form, setForm] = useState({
     machine_id: machines[0]?.machine_id || "",
+    ticket_type_id: ticketTypes[0]?._id || "",
     title: "",
     description: "",
     assigned_to: "",
     priority: 1,
+    location: "",
+    contact_name: "",
+    contact_number: "",
+    contact_address: "",
   });
-  const [steps, setSteps] = useState([{ id: crypto.randomUUID(), label: "", completion_type: "confirmation" }]);
+  const [steps, setSteps] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [photoPreviews, setPhotoPreviews] = useState([]);
   const fileInputRef = useRef(null);
@@ -273,8 +283,20 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    if (!form.machine_id || !form.title.trim()) {
-      setError("Machine and title are required.");
+    if (ticketKind === "machine" && !form.machine_id) {
+      setError("Machine is required.");
+      return;
+    }
+    if (ticketKind === "custom" && !form.ticket_type_id) {
+      setError("Ticket type is required.");
+      return;
+    }
+    if (ticketKind === "custom" && !form.location.trim()) {
+      setError("Location is required for non-machine tickets.");
+      return;
+    }
+    if (!form.title.trim()) {
+      setError("Title is required.");
       return;
     }
     if (steps.some((s) => !s.label.trim())) {
@@ -283,17 +305,31 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
     }
     setSaving(true);
     try {
-      const res = await client.post("/tickets", {
-        ...form,
+      const payload = {
+        title: form.title.trim(),
+        description: form.description,
         assigned_to: form.assigned_to || null,
         priority: parseInt(form.priority, 10) || 1,
         steps: steps.map(({ id, ...rest }, i) => ({
           step_index: i,
           label: rest.label.trim(),
           completion_type: rest.completion_type,
+          manual_id: rest.manual_id || null,
+          manual_title: rest.manual_title || null,
+          send_manual_via_whatsapp: rest.send_manual_via_whatsapp || false,
           completed: false,
         })),
-      });
+      };
+      if (ticketKind === "machine") {
+        payload.machine_id = form.machine_id;
+      } else {
+        payload.ticket_type_id = form.ticket_type_id;
+        payload.location = form.location.trim();
+        if (form.contact_name.trim()) payload.contact_name = form.contact_name.trim();
+        if (form.contact_number.trim()) payload.contact_number = form.contact_number.trim();
+        if (form.contact_address.trim()) payload.contact_address = form.contact_address.trim();
+      }
+      const res = await client.post("/tickets", payload);
       const ticketId = res.data._id;
       if (photos.length > 0) {
         const fd = new FormData();
@@ -325,14 +361,83 @@ function CreateTicketModal({ machines, users, onSave, onClose }) {
         </div>
 
         <form onSubmit={handleSubmit}>
+          {/* Ticket Kind selector */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#555", display: "block", marginBottom: 6 }}>Ticket Kind</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setTicketKind("machine")}
+                style={{ flex: 1, padding: "7px 0", borderRadius: 4, border: `2px solid ${ticketKind === "machine" ? "#1a1a2e" : "#ddd"}`, background: ticketKind === "machine" ? "#1a1a2e" : "#fff", color: ticketKind === "machine" ? "#fff" : "#555", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              >
+                Machine Ticket
+              </button>
+              <button
+                type="button"
+                onClick={() => setTicketKind("custom")}
+                style={{ flex: 1, padding: "7px 0", borderRadius: 4, border: `2px solid ${ticketKind === "custom" ? "#1a1a2e" : "#ddd"}`, background: ticketKind === "custom" ? "#1a1a2e" : "#fff", color: ticketKind === "custom" ? "#fff" : "#555", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              >
+                Custom Type
+              </button>
+            </div>
+          </div>
+
           <div style={modal.grid}>
-            <label style={modal.label}>Machine *</label>
-            <select style={modal.input} value={form.machine_id} onChange={(e) => setField("machine_id", e.target.value)} required>
-              {machines.map((m) => (
-                <option key={m.machine_id} value={m.machine_id}>{m.machine_id} — {m.name}</option>
-              ))}
-              {machines.length === 0 && <option value="">No machines registered</option>}
-            </select>
+            {/* Machine or Type + Location */}
+            {ticketKind === "machine" ? (
+              <>
+                <label style={modal.label}>Machine *</label>
+                <select style={modal.input} value={form.machine_id} onChange={(e) => setField("machine_id", e.target.value)} required>
+                  {machines.map((m) => (
+                    <option key={m.machine_id} value={m.machine_id}>{m.machine_id} — {m.name}</option>
+                  ))}
+                  {machines.length === 0 && <option value="">No machines registered</option>}
+                </select>
+              </>
+            ) : (
+              <>
+                <label style={modal.label}>Type *</label>
+                <select style={modal.input} value={form.ticket_type_id} onChange={(e) => setField("ticket_type_id", e.target.value)} required>
+                  <option value="">— Select type —</option>
+                  {ticketTypes.map((tt) => (
+                    <option key={tt._id} value={tt._id}>{tt.name}</option>
+                  ))}
+                </select>
+
+                <label style={modal.label}>Location *</label>
+                <input
+                  style={modal.input}
+                  placeholder="e.g. Unit 4, High St, London"
+                  value={form.location}
+                  onChange={(e) => setField("location", e.target.value)}
+                  required
+                />
+
+                <label style={modal.label}>Contact Name</label>
+                <input
+                  style={modal.input}
+                  placeholder="Optional"
+                  value={form.contact_name}
+                  onChange={(e) => setField("contact_name", e.target.value)}
+                />
+
+                <label style={modal.label}>Contact Phone</label>
+                <input
+                  style={modal.input}
+                  placeholder="Optional"
+                  value={form.contact_number}
+                  onChange={(e) => setField("contact_number", e.target.value)}
+                />
+
+                <label style={modal.label}>Contact Address</label>
+                <input
+                  style={modal.input}
+                  placeholder="Optional"
+                  value={form.contact_address}
+                  onChange={(e) => setField("contact_address", e.target.value)}
+                />
+              </>
+            )}
 
             <label style={modal.label}>Title *</label>
             <input
