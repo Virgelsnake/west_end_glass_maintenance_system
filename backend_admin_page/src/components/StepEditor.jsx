@@ -147,7 +147,8 @@ export default function StepEditor({
   }
 
   function addItem() {
-    if (!nnewItem = {
+    if (!newLabel.trim()) return;
+    const newItem = {
       id: crypto.randomUUID(),
       label: newLabel.trim(),
       completion_type: newType,
