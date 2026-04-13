@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, CheckCircle2, Circle, AlertCircle, Loader2,
   MessageSquare, ImageIcon, ListTodo, Clock, User, Tag,
-  ChevronDown,
+  ChevronDown, MapPin, Phone, FileText, Download,
 } from "lucide-react";
 import { format, formatDistanceToNow, isPast } from "date-fns";
 
@@ -117,7 +117,7 @@ export default function TicketDetail() {
           <h1 className="text-xl font-bold text-slate-900">{ticket.title}</h1>
           <div className="mt-1 flex items-center gap-2 flex-wrap">
             <code className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
-              {ticket.machine_id}
+              {ticket.machine_id || ticket.location || "—"}
             </code>
             {ticket.category && (
               <span
@@ -226,6 +226,34 @@ export default function TicketDetail() {
               {ticket.description}
             </div>
           )}
+          {ticket.location && (
+            <InfoRow
+              icon={<MapPin size={14} />}
+              label="Location"
+              value={ticket.location}
+            />
+          )}
+          {ticket.contact_name && (
+            <InfoRow
+              icon={<User size={14} />}
+              label="Contact"
+              value={ticket.contact_name}
+            />
+          )}
+          {ticket.contact_number && (
+            <InfoRow
+              icon={<Phone size={14} />}
+              label="Phone"
+              value={ticket.contact_number}
+            />
+          )}
+          {ticket.contact_address && (
+            <InfoRow
+              icon={<MapPin size={14} />}
+              label="Address"
+              value={ticket.contact_address}
+            />
+          )}
         </div>
 
         {/* Main panel */}
@@ -323,6 +351,7 @@ function PriorityBadge({ priority }) {
 }
 
 function StepsTab({ steps }) {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
   if (!steps.length)
     return <p className="text-sm text-slate-400">No steps defined.</p>;
   return (
@@ -342,7 +371,7 @@ function StepsTab({ steps }) {
             >
               {step.label}
             </p>
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <span className="text-xs text-slate-400 capitalize">
                 {step.completion_type?.replace("_", " ")}
               </span>
@@ -350,6 +379,17 @@ function StepsTab({ steps }) {
                 <span className="text-xs text-blue-600 italic">
                   &ldquo;{step.note_text}&rdquo;
                 </span>
+              )}
+              {step.completion_type === "manual" && step.manual_id && (
+                <a
+                  href={`${API_BASE}/manuals/${step.manual_id}/file`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  <Download size={11} />
+                  {step.manual_title || "Reference Document"}
+                </a>
               )}
             </div>
           </div>
@@ -404,7 +444,59 @@ function MessagesTab({ messages, users }) {
   );
 }
 
-function Lightbox({ src, onClose }) {
+/** Format an ISO/UTC datetime string for display in tiles. */
+function formatPhotoDate(isoString) {
+  if (!isoString) return null;
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleString(undefined, {
+      year: "numeric", month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Metadata strip rendered uniformly below every photo tile. */
+function PhotoMetaStrip({ meta, fallbackDate }) {
+  const dateLabel = meta?.datetime_taken
+    ? formatPhotoDate(meta.datetime_taken)
+    : fallbackDate
+    ? formatPhotoDate(fallbackDate)
+    : null;
+
+  const hasGps = meta?.latitude != null && meta?.longitude != null;
+  const mapsUrl = hasGps
+    ? `https://www.google.com/maps?q=${meta.latitude},${meta.longitude}`
+    : null;
+
+  if (!dateLabel && !hasGps) return null;
+
+  return (
+    <div className="px-2 py-1.5 flex items-center justify-between gap-1 bg-slate-50 border-t border-slate-200">
+      {dateLabel ? (
+        <span className="text-xs text-slate-500 truncate leading-tight">{dateLabel}</span>
+      ) : (
+        <span />
+      )}
+      {hasGps && (
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="shrink-0 inline-flex items-center gap-0.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded"
+          title={`${meta.latitude}, ${meta.longitude}`}
+        >
+          📍 GPS
+        </a>
+      )}
+    </div>
+  );
+}
+
+function Lightbox({ src, onClose, metadata, fallbackDate }) {
   useEffect(() => {
     if (!src) return;
     function onKey(e) { if (e.key === "Escape") onClose(); }
@@ -413,9 +505,22 @@ function Lightbox({ src, onClose }) {
   }, [src, onClose]);
 
   if (!src) return null;
+
+  const dateLabel = metadata?.datetime_taken
+    ? formatPhotoDate(metadata.datetime_taken)
+    : fallbackDate
+    ? formatPhotoDate(fallbackDate)
+    : null;
+  const hasGps = metadata?.latitude != null && metadata?.longitude != null;
+  const mapsUrl = hasGps
+    ? `https://www.google.com/maps?q=${metadata.latitude},${metadata.longitude}`
+    : null;
+  const cameraLabel = [metadata?.camera_make, metadata?.camera_model].filter(Boolean).join(" ") || null;
+  const showStrip = dateLabel || hasGps || cameraLabel;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85"
       onClick={onClose}
     >
       <button
@@ -427,20 +532,42 @@ function Lightbox({ src, onClose }) {
       <img
         src={src}
         alt="Enlarged"
-        className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+        className="max-h-[85vh] max-w-[90vw] object-contain rounded-t-lg shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       />
+      {showStrip && (
+        <div
+          className="max-w-[90vw] w-fit bg-black/70 text-white text-xs rounded-b-lg px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {dateLabel && <span>📅 {dateLabel}</span>}
+          {cameraLabel && <span>📷 {cameraLabel}</span>}
+          {hasGps && (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-300 hover:text-blue-100 underline"
+            >
+              📍 {metadata.latitude.toFixed(5)}, {metadata.longitude.toFixed(5)}
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 function PhotosTab({ ticketId, ticket }) {
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-  const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [lightbox, setLightbox] = useState(null); // { src, metadata, fallbackDate }
+
+  const refMetaMap = ticket?.reference_photo_metadata || {};
 
   const refPhotos = (ticket?.reference_photos || []).map((filename) => ({
     filename,
     url: `${API_BASE}/tickets/${ticketId}/photos/${encodeURIComponent(filename)}`,
+    metadata: refMetaMap[filename] || null,
   }));
 
   const stepPhotos = (ticket?.steps || [])
@@ -450,6 +577,8 @@ function PhotosTab({ ticketId, ticket }) {
       label: s.label,
       stepIndex: s.step_index,
       url: `${API_BASE}/tickets/${ticketId}/photos/${encodeURIComponent(s.photo_path.split("/").pop())}`,
+      metadata: s.photo_metadata || null,
+      fallbackDate: s.completed_at || null,
     }));
 
   if (!refPhotos.length && !stepPhotos.length)
@@ -457,7 +586,12 @@ function PhotosTab({ ticketId, ticket }) {
 
   return (
     <div className="space-y-6">
-      <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      <Lightbox
+        src={lightbox?.src}
+        metadata={lightbox?.metadata}
+        fallbackDate={lightbox?.fallbackDate}
+        onClose={() => setLightbox(null)}
+      />
       {refPhotos.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
@@ -465,17 +599,28 @@ function PhotosTab({ ticketId, ticket }) {
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {refPhotos.map((p, i) => (
-              <button
+              <div
                 key={i}
-                type="button"
-                onClick={() => setLightboxSrc(p.url)}
-                className="relative rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="rounded-lg overflow-hidden border border-slate-200 bg-white"
               >
-                <img src={p.url} alt={`Reference ${i + 1}`} className="w-full h-56 object-cover" />
-                <span className="absolute top-1 left-1 bg-blue-600 text-white text-xs font-bold px-1.5 py-0.5 rounded">
-                  REF
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setLightbox({ src: p.url, metadata: p.metadata, fallbackDate: null })}
+                  className="relative w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  <div className="aspect-square w-full overflow-hidden">
+                    <img
+                      src={p.url}
+                      alt={`Reference ${i + 1}`}
+                      className="w-full h-full object-cover hover:opacity-90 transition-opacity"
+                    />
+                  </div>
+                  <span className="absolute top-1.5 left-1.5 bg-blue-600 text-white text-xs font-bold px-1.5 py-0.5 rounded">
+                    REF
+                  </span>
+                </button>
+                <PhotoMetaStrip meta={p.metadata} fallbackDate={null} />
+              </div>
             ))}
           </div>
         </div>
@@ -487,15 +632,28 @@ function PhotosTab({ ticketId, ticket }) {
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {stepPhotos.map((p, i) => (
-              <button
+              <div
                 key={i}
-                type="button"
-                onClick={() => setLightboxSrc(p.url)}
-                className="rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity text-left w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="rounded-lg overflow-hidden border border-slate-200 bg-white"
               >
-                <img src={p.url} alt={`Step ${p.stepIndex}`} className="w-full h-56 object-cover" />
-                <div className="px-1.5 py-1 text-xs text-slate-500 truncate">{p.label}</div>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setLightbox({ src: p.url, metadata: p.metadata, fallbackDate: p.fallbackDate })}
+                  className="w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  <div className="aspect-square w-full overflow-hidden">
+                    <img
+                      src={p.url}
+                      alt={`Step ${p.stepIndex}`}
+                      className="w-full h-full object-cover hover:opacity-90 transition-opacity"
+                    />
+                  </div>
+                </button>
+                <div className="px-2 py-1 text-xs text-slate-600 font-medium truncate border-t border-slate-100">
+                  Step {p.stepIndex + 1}: {p.label}
+                </div>
+                <PhotoMetaStrip meta={p.metadata} fallbackDate={p.fallbackDate} />
+              </div>
             ))}
           </div>
         </div>

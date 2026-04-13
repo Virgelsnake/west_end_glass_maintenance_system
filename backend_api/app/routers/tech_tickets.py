@@ -6,6 +6,7 @@ from ..auth import get_current_technician
 from ..database import get_db
 from ..config import settings
 from ..services.audit_service import log_event
+from ..utils.exif import extract_photo_metadata
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/tech", tags=["tech-tickets"])
@@ -124,6 +125,8 @@ async def upload_photo_to_step(
     with open(file_path, "wb") as f:
         shutil.copyfileobj(photo.file, f)
 
+    photo_meta = extract_photo_metadata(file_path)
+
     now = datetime.utcnow()
     await db.tickets.update_one(
         {"_id": ObjectId(ticket_id)},
@@ -132,6 +135,7 @@ async def upload_photo_to_step(
             f"steps.{step_index}.completed_at": now,
             f"steps.{step_index}.completed_by": tech["phone_number"],
             f"steps.{step_index}.photo_path": filename,
+            f"steps.{step_index}.photo_metadata": photo_meta,
             "status": "in_progress",
         }}
     )

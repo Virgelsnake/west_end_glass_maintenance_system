@@ -1,7 +1,18 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 from datetime import datetime
 from .user import PyObjectId
+
+
+class PhotoMetadata(BaseModel):
+    datetime_taken: Optional[datetime] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    altitude: Optional[float] = None
+    camera_make: Optional[str] = None
+    camera_model: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
 
 TicketCategory = Literal["repair", "installation", "maintenance", "emergency", "inspection"]
 
@@ -19,6 +30,7 @@ class TicketStep(BaseModel):
     manual_title: Optional[str] = None        # stored for display without extra lookup
     send_manual_via_whatsapp: bool = False     # Code Path B: proactively push doc via WA
     manual_doc_sent: bool = False              # prevents duplicate WA doc sends
+    photo_metadata: Optional[PhotoMetadata] = None
 
 
 class TicketBase(BaseModel):
@@ -33,6 +45,7 @@ class TicketBase(BaseModel):
     due_date: Optional[datetime] = None
     category: Optional[TicketCategory] = None
     reference_photos: List[str] = []  # filenames of admin-attached reference images
+    reference_photo_metadata: Dict[str, PhotoMetadata] = {}  # keyed by filename
     location: Optional[str] = None            # for non-machine ticket types
     contact_name: Optional[str] = None
     contact_number: Optional[str] = None

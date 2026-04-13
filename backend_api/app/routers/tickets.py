@@ -7,6 +7,7 @@ from ..models.ticket import TicketCreate, TicketUpdate
 from ..services.audit_service import log_event
 from ..services import whatsapp as wa_service
 from ..config import settings
+from ..utils.exif import extract_photo_metadata
 from datetime import datetime
 import logging
 import os
@@ -227,10 +228,19 @@ async def add_reference_photos(
             shutil.copyfileobj(photo.file, f)
         saved_filenames.append(filename)
 
+    # Extract and store EXIF metadata for each saved photo
+    meta_updates = {}
+    for filename in saved_filenames:
+        fp = os.path.join(save_dir, filename)
+        meta_updates[f"reference_photo_metadata.{filename}"] = extract_photo_metadata(fp)
+
     # Push filenames into the ticket document
     await db.tickets.update_one(
         {"_id": ObjectId(ticket_id)},
-        {"$push": {"reference_photos": {"$each": saved_filenames}}},
+        {
+            "$push": {"reference_photos": {"$each": saved_filenames}},
+            "$set": meta_updates,
+        },
     )
 
     # Try to send each photo to the assigned technician via WhatsApp
