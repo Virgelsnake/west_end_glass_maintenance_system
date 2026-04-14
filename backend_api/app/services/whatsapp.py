@@ -121,7 +121,7 @@ async def send_ticket_assignment_notification(
 ) -> dict:
     """
     Notify a technician that a ticket has been assigned to them.
-    Uses the westend_glass__machine_servicing_system template (3 params: user_name, service_date, machine_name).
+    Uses the westend_glass__machine_servicing_system2 template (3 params: user_name, service_date, machine_name).
     """
     from datetime import datetime
     url = f"{WHATSAPP_API_BASE}/{settings.meta_phone_number_id}/messages"
@@ -135,7 +135,7 @@ async def send_ticket_assignment_notification(
         "to": to,
         "type": "template",
         "template": {
-            "name": "westend_glass__machine_servicing_system",
+            "name": "westend_glass__machine_servicing_system2",
             "language": {"code": "en_US"},
             "components": [
                 {

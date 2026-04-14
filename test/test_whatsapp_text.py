@@ -11,7 +11,7 @@ Usage (from project root):
     python test/test_whatsapp_text.py
 
     # Template message (works anytime, required for new conversations):
-    python test/test_whatsapp_text.py --template westend_glass__machine_servicing_system --params "Tech Name" "April 13, 2026" "WEG-001"
+    python test/test_whatsapp_text.py --template westend_glass__machine_servicing_system2 --params "Tech Name" "April 14, 2026" "WEG-001"
 
     # Custom message body:
     python test/test_whatsapp_text.py --msg "Hello from test!"
@@ -305,7 +305,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--template",
         default=None,
-        help="Template name to use instead of free-form text (e.g. westend_glass__machine_servicing_system)",
+        help="Template name to use instead of free-form text (e.g. westend_glass__machine_servicing_system2)",
     )
     parser.add_argument(
         "--params",
