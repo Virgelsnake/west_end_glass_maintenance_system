@@ -193,14 +193,28 @@ async def send_interactive_buttons(to: str, body_text: str, buttons: list) -> di
         return resp.json()
 
 
-async def send_start_ticket_button(to: str, ticket_id: str, ticket_title: str, machine_id: str) -> dict:
+async def send_start_ticket_button(
+    to: str,
+    ticket_id: str,
+    ticket_title: str,
+    machine_id: str,
+    description: str = "",
+    priority: int = 0,
+) -> dict:
     """
     Send an interactive 'Start Ticket' button message immediately after the
     assignment notification template.  Uses a free-form interactive message
     (only valid within the 24 h conversation window, but we try anyway and
     swallow failures gracefully at the call site).
     """
-    body = f"Tap below to begin working on:\n*{ticket_title}*\nMachine: {machine_id}"
+    PRIORITY_LABELS = {1: "🔴 High", 2: "🟡 Medium", 3: "🟢 Low"}
+    parts = [f"*{ticket_title}*", f"Machine: {machine_id}"]
+    if priority and priority in PRIORITY_LABELS:
+        parts.append(f"Priority: {PRIORITY_LABELS[priority]}")
+    if description:
+        parts.append(f"\n{description[:200]}")
+    parts.append("\nTap below to begin:")
+    body = "\n".join(parts)
     buttons = [{"id": f"ticket_start_{ticket_id}", "title": "Start Ticket"}]
     return await send_interactive_buttons(to=to, body_text=body, buttons=buttons)
 

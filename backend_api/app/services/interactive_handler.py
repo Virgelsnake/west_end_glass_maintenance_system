@@ -30,6 +30,7 @@ Return value from handle_interactive():
 import logging
 from bson import ObjectId
 from . import ticket_service
+from . import whatsapp as wa_service
 
 logger = logging.getLogger("interactive_handler")
 
@@ -91,7 +92,7 @@ def parse_reply_id(reply_id: str) -> dict:
 
     # ── step_* actions ────────────────────────────────────────────────────────
     elif prefix == "step":
-        if action in ("done", "issue") and len(parts) >= 4:
+        if action in ("done", "issue", "doc") and len(parts) >= 4:
             try:
                 step_index = int(parts[3])
             except ValueError:
@@ -179,6 +180,30 @@ def build_step_buttons(ticket: dict) -> dict | None:
             }
 
         if ctype in ("confirmation", "manual"):
+            return {
+                "type": "buttons",
+                "body": f"Step {idx + 1} of {total}: {label}",
+                "buttons": [
+                    {"id": f"step_done_{ticket_id}_{idx}",  "title": "Done"},
+                    {"id": f"step_issue_{ticket_id}_{idx}", "title": "Report Issue"},
+                    {"id": f"menu_open_{ticket_id}",        "title": "Menu"},
+                ],
+            }
+
+        if ctype == "attachment":
+            manual_id = step.get("manual_id")
+            if manual_id:
+                doc_title = step.get("manual_title") or "reference document"
+                return {
+                    "type": "buttons",
+                    "body": f"Step {idx + 1} of {total}: {label}\n\n📄 Tap *Get Document* to receive: _{doc_title}_",
+                    "buttons": [
+                        {"id": f"step_doc_{ticket_id}_{idx}",  "title": "Get Document"},
+                        {"id": f"step_done_{ticket_id}_{idx}", "title": "Done"},
+                        {"id": f"menu_open_{ticket_id}",       "title": "Menu"},
+                    ],
+                }
+            # No manual attached — treat like confirmation
             return {
                 "type": "buttons",
                 "body": f"Step {idx + 1} of {total}: {label}",
@@ -399,6 +424,36 @@ async def handle_interactive(
         )
         # Reload and send first step directly — no Claude needed
         ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
+
+        # Code Path B: auto-send document for first incomplete attachment/manual step
+        for step in ticket.get("steps", []):
+            if not step.get("completed", False):
+                if (
+                    step.get("completion_type") in ("manual", "attachment")
+                    and step.get("send_manual_via_whatsapp", False)
+                    and not step.get("manual_doc_sent", False)
+                    and step.get("manual_id")
+                ):
+                    try:
+                        import os
+                        from ..config import settings
+                        manual = await db.manuals.find_one({"_id": ObjectId(step["manual_id"])})
+                        if manual:
+                            file_path = os.path.join(settings.manual_storage_path, manual["stored_filename"])
+                            await wa_service.send_document(
+                                to=phone_number,
+                                file_path=file_path,
+                                filename=manual["original_filename"],
+                                caption=f"Reference document for step: {step['label']}",
+                            )
+                            await db.tickets.update_one(
+                                {"_id": ObjectId(ticket_id), "steps.step_index": step["step_index"]},
+                                {"$set": {"steps.$.manual_doc_sent": True}},
+                            )
+                    except Exception as _exc:
+                        logger.warning("Code Path B failed in ticket_start: %s", _exc)
+                break  # only check first incomplete step
+
         step_payload = build_step_buttons(ticket)
         if step_payload is None:
             payload = build_close_ticket_buttons(ticket)
@@ -449,6 +504,48 @@ async def handle_interactive(
             "body": payload["body"],
             "button_label": payload["button_label"],
             "sections": payload["sections"],
+        }
+
+    # ── step_doc: tech requested the reference document ─────────────────────
+    elif action == "step_doc":
+        ticket_id = parsed["ticket_id"]
+        step_index = parsed["step_index"]
+        ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
+        if ticket is None:
+            return {"action": "send_text", "text": "Ticket not found."}
+        step = next((s for s in ticket.get("steps", []) if s["step_index"] == step_index), None)
+        if not step or not step.get("manual_id"):
+            return {"action": "send_text", "text": "No document is attached to this step."}
+        try:
+            import os
+            from ..config import settings
+            manual = await db.manuals.find_one({"_id": ObjectId(step["manual_id"])})
+            if not manual:
+                return {"action": "send_text", "text": "Document not found. Please contact your supervisor."}
+            file_path = os.path.join(settings.manual_storage_path, manual["stored_filename"])
+            await wa_service.send_document(
+                to=phone_number,
+                file_path=file_path,
+                filename=manual["original_filename"],
+                caption=f"Reference document for step: {step['label']}",
+            )
+            await db.tickets.update_one(
+                {"_id": ObjectId(ticket_id), "steps.step_index": step_index},
+                {"$set": {"steps.$.manual_doc_sent": True}},
+            )
+        except Exception as exc:
+            logger.warning("Failed to send document on step_doc: %s", exc)
+            return {"action": "send_text", "text": "Failed to send document. Please try again or contact your supervisor."}
+        total = len(ticket.get("steps", []))
+        label = step["label"]
+        return {
+            "action": "send_buttons",
+            "body": f"📄 Document sent! Review it and tap Done when ready.\n\nStep {step_index + 1} of {total}: {label}",
+            "buttons": [
+                {"id": f"step_done_{ticket_id}_{step_index}",  "title": "Done"},
+                {"id": f"step_issue_{ticket_id}_{step_index}", "title": "Report Issue"},
+                {"id": f"menu_open_{ticket_id}",               "title": "Menu"},
+            ],
         }
 
     # ── step_done: tech confirmed a step ─────────────────────────────────────

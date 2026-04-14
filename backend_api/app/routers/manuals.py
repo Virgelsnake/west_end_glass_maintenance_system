@@ -113,11 +113,18 @@ async def get_manual_file(
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    return FileResponse(
-        file_path,
-        filename=manual["original_filename"],
-        media_type="application/octet-stream",
-    )
+    ext = os.path.splitext(manual["original_filename"])[1].lower()
+    _INLINE_MIME = {
+        ".pdf":  "application/pdf",
+        ".jpg":  "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png":  "image/png",
+        ".webp": "image/webp",
+    }
+    mime = _INLINE_MIME.get(ext, "application/octet-stream")
+    if mime == "application/octet-stream":
+        return FileResponse(file_path, filename=manual["original_filename"], media_type=mime)
+    return FileResponse(file_path, media_type=mime)
 
 
 @router.delete("/{manual_id}", status_code=204)
@@ -173,8 +180,15 @@ async def get_manual_file_tech(
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    return FileResponse(
-        file_path,
-        filename=manual["original_filename"],
-        media_type="application/octet-stream",
-    )
+    ext = os.path.splitext(manual["original_filename"])[1].lower()
+    _INLINE_MIME = {
+        ".pdf":  "application/pdf",
+        ".jpg":  "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png":  "image/png",
+        ".webp": "image/webp",
+    }
+    mime = _INLINE_MIME.get(ext, "application/octet-stream")
+    if mime == "application/octet-stream":
+        return FileResponse(file_path, filename=manual["original_filename"], media_type=mime)
+    return FileResponse(file_path, media_type=mime)

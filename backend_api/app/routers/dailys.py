@@ -220,4 +220,16 @@ async def _create_daily_ticket(db, template: dict) -> str:
     except Exception as exc:
         logger.warning("WhatsApp notification failed for daily ticket: %s", exc)
 
+    try:
+        await wa_service.send_start_ticket_button(
+            to=template["assigned_to"],
+            ticket_id=ticket_id,
+            ticket_title=doc["title"],
+            machine_id=template["machine_id"],
+            description=doc.get("description") or "",
+            priority=doc.get("priority") or 0,
+        )
+    except Exception as exc:
+        logger.warning("Start-ticket button failed for daily ticket: %s", exc)
+
     return ticket_id

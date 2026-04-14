@@ -77,6 +77,8 @@ async def create_ticket(ticket: TicketCreate, current_admin: dict = Depends(get_
                 ticket_id=ticket_id,
                 ticket_title=ticket.title,
                 machine_id=display_id,
+                description=ticket.description or "",
+                priority=ticket.priority or 0,
             )
         except Exception as exc:
             logger.warning("Start-ticket button failed on creation: %s", exc)
@@ -147,6 +149,8 @@ async def update_ticket(
                 ticket_id=ticket_id,
                 ticket_title=ticket.get("title", ""),
                 machine_id=display_id,
+                description=ticket.get("description") or "",
+                priority=ticket.get("priority") or 0,
             )
         except Exception as exc:
             logger.warning("Start-ticket button failed on update: %s", exc)
