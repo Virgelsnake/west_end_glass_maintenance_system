@@ -111,7 +111,18 @@ async def get_manual_file(
     safe_name = os.path.basename(manual["stored_filename"])
     file_path = os.path.join(settings.manual_storage_path, safe_name)
     if not os.path.isfile(file_path):
-        raise HTTPException(status_code=404, detail="File not found on disk")
+        logger.error(
+            "Manual file missing: manual_id=%s stored_name=%s expected_path=%s exists=%s storage_dir_exists=%s",
+            manual_id,
+            safe_name,
+            file_path,
+            os.path.exists(file_path),
+            os.path.isdir(settings.manual_storage_path),
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="Document file not found on disk. It may have been deleted. Please re-upload it.",
+        )
 
     ext = os.path.splitext(manual["original_filename"])[1].lower()
     _INLINE_MIME = {
@@ -122,9 +133,11 @@ async def get_manual_file(
         ".webp": "image/webp",
     }
     mime = _INLINE_MIME.get(ext, "application/octet-stream")
-    if mime == "application/octet-stream":
-        return FileResponse(file_path, filename=manual["original_filename"], media_type=mime)
-    return FileResponse(file_path, media_type=mime)
+    return FileResponse(
+        file_path,
+        filename=manual["original_filename"],
+        media_type=mime,
+    )
 
 
 @router.delete("/{manual_id}", status_code=204)
@@ -178,7 +191,18 @@ async def get_manual_file_tech(
     safe_name = os.path.basename(manual["stored_filename"])
     file_path = os.path.join(settings.manual_storage_path, safe_name)
     if not os.path.isfile(file_path):
-        raise HTTPException(status_code=404, detail="File not found on disk")
+        logger.error(
+            "Manual file missing (tech): manual_id=%s stored_name=%s expected_path=%s exists=%s storage_dir_exists=%s",
+            manual_id,
+            safe_name,
+            file_path,
+            os.path.exists(file_path),
+            os.path.isdir(settings.manual_storage_path),
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="Document file not found on disk. It may have been deleted. Please contact your supervisor.",
+        )
 
     ext = os.path.splitext(manual["original_filename"])[1].lower()
     _INLINE_MIME = {
@@ -189,6 +213,8 @@ async def get_manual_file_tech(
         ".webp": "image/webp",
     }
     mime = _INLINE_MIME.get(ext, "application/octet-stream")
-    if mime == "application/octet-stream":
-        return FileResponse(file_path, filename=manual["original_filename"], media_type=mime)
-    return FileResponse(file_path, media_type=mime)
+    return FileResponse(
+        file_path,
+        filename=manual["original_filename"],
+        media_type=mime,
+    )
