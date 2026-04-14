@@ -143,14 +143,19 @@ export default function Files() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       {fileTypeIcon(m.file_type)}
-                      <a
-                        href={`${API_BASE}/manuals/${m._id}/file`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-medium text-slate-800 hover:text-blue-600 hover:underline"
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await client.get(`/manuals/${m._id}/file`, { responseType: "blob" });
+                            const url = URL.createObjectURL(res.data);
+                            window.open(url, "_blank", "noreferrer");
+                          } catch { toast.error("Could not open file."); }
+                        }}
+                        className="font-medium text-slate-800 hover:text-blue-600 hover:underline text-left"
                       >
                         {m.title}
-                      </a>
+                      </button>
                     </div>
                   </td>
                   <td className="px-4 py-3">{fileTypeBadge(m.file_type)}</td>

@@ -381,15 +381,20 @@ function StepsTab({ steps }) {
                 </span>
               )}
               {step.completion_type === "attachment" && step.manual_id && (
-                <a
-                  href={`${API_BASE}/manuals/${step.manual_id}/file`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await client.get(`/manuals/${step.manual_id}/file`, { responseType: "blob" });
+                      const url = URL.createObjectURL(res.data);
+                      window.open(url, "_blank", "noreferrer");
+                    } catch { toast.error("Could not open document."); }
+                  }}
                   className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
                 >
                   <Download size={11} />
                   {step.manual_title || "Reference Document"}
-                </a>
+                </button>
               )}
             </div>
           </div>
