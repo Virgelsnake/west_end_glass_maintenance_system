@@ -355,7 +355,14 @@ function CreateTicketModal({ machines, users, ticketTypes, onSave, onClose }) {
       }
       onSave();
     } catch (err) {
-      setError(err.response?.data?.detail || "Failed to create ticket.");
+      const detail = err.response?.data?.detail;
+      setError(
+        Array.isArray(detail)
+          ? detail.map((e) => e.msg || String(e)).join("; ")
+          : typeof detail === "string"
+          ? detail
+          : "Failed to create ticket."
+      );
       setSaving(false);
     }
   }

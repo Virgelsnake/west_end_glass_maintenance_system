@@ -190,7 +190,7 @@ export default function TechTicketDetail() {
                   {step.note && (
                     <p className="text-xs text-blue-600 mt-1 italic">&ldquo;{step.note}&rdquo;</p>
                   )}
-                  {step.completion_type === "manual" && step.manual_id && (
+                  {(step.completion_type === "manual" || step.completion_type === "attachment") && step.manual_id && (
                     <button
                       onClick={() => downloadManual(step.manual_id, step.manual_title)}
                       className="mt-1.5 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
@@ -217,7 +217,7 @@ export default function TechTicketDetail() {
               {/* Completion UI */}
               {activeStep === i && !step.completed && (
                 <div className="px-4 pb-4 pt-0 border-t border-slate-100 space-y-3">
-                  {step.completion_type === "confirmation" || step.completion_type === "manual" ? (
+                  {step.completion_type === "confirmation" || step.completion_type === "manual" || step.completion_type === "attachment" ? (
                     <button
                       onClick={() => completeStep(i, "confirmation")}
                       disabled={submitting}

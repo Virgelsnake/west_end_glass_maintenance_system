@@ -299,7 +299,7 @@ async def process_inbound_message(
         for i, step in enumerate(ticket.get("steps", [])):
             if not step.get("completed", False):
                 if (
-                    step.get("completion_type") == "manual"
+                    step.get("completion_type") in ("manual", "attachment")
                     and step.get("send_manual_via_whatsapp", False)
                     and not step.get("manual_doc_sent", False)
                     and step.get("manual_id")

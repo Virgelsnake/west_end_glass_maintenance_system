@@ -20,7 +20,7 @@ TicketCategory = Literal["repair", "installation", "maintenance", "emergency", "
 class TicketStep(BaseModel):
     step_index: int
     label: str
-    completion_type: Literal["confirmation", "note", "photo", "manual"]
+    completion_type: Literal["confirmation", "note", "photo", "manual", "attachment"]
     completed: bool = False
     completed_at: Optional[datetime] = None
     completed_by: Optional[str] = None  # phone number or "admin"
