@@ -1,8 +1,9 @@
+import { createElement } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   LayoutDashboard, Ticket, Users, Cpu, ScrollText,
-  LogOut, ShieldCheck, X, CalendarClock, FileText, Settings,
+  LogOut, ShieldCheck, X, CalendarClock, FileText, Settings, CalendarDays,
 } from "lucide-react";
 
 const ROLE_COLORS = {
@@ -20,6 +21,7 @@ const ROLE_LABELS = {
 const NAV = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/tickets", icon: Ticket, label: "Tickets" },
+  { to: "/calendar", icon: CalendarDays, label: "Calendar" },
   { to: "/users", icon: Users, label: "Technicians" },
   { to: "/machines", icon: Cpu, label: "Machines" },
   { to: "/dailys", icon: CalendarClock, label: "Daily Checks" },
@@ -68,7 +70,7 @@ export default function Sidebar({ onClose }) {
 
       {/* Nav links */}
       <ul className="flex-1 space-y-0.5 px-3">
-        {NAV.map(({ to, icon: Icon, label }) => (
+        {NAV.map(({ to, icon, label }) => (
           <li key={to}>
             <NavLink
               to={to}
@@ -82,7 +84,7 @@ export default function Sidebar({ onClose }) {
               }
               style={({ isActive }) => isActive ? {background: '#ee6300'} : {}}
             >
-              <Icon size={17} />
+              {createElement(icon, { size: 17 })}
               {label}
             </NavLink>
           </li>

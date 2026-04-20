@@ -6,6 +6,7 @@ import AppLayout from "./components/AppLayout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Tickets from "./pages/Tickets";
+import Calendar from "./pages/Calendar";
 import TicketDetail from "./pages/TicketDetail";
 import Users from "./pages/Users";
 import Machines from "./pages/Machines";
@@ -32,6 +33,7 @@ export default function App() {
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/tickets" element={<Tickets />} />
+            <Route path="/calendar" element={<Calendar />} />
             <Route path="/tickets/:id" element={<TicketDetail />} />
             <Route path="/users" element={<Users />} />
             <Route path="/machines" element={<Machines />} />
@@ -66,4 +68,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-
