@@ -18,14 +18,22 @@ function SortIcon({ active, dir }) {
   return <span style={{ fontSize: 10, marginLeft: 3 }}>{dir === "asc" ? "↑" : "↓"}</span>;
 }
 
+function getTicketDate(ticket) {
+  const raw = ticket.scheduled_date || ticket.due_date || ticket.created_at;
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export default function Tickets() {
   const [tickets, setTickets] = useState([]);
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "");
   const [search, setSearch] = useState(searchParams.get("machine") || "");
   const [assignedFilter, setAssignedFilter] = useState(searchParams.get("assigned_to") || "");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateFrom, setDateFrom] = useState(searchParams.get("date_from") || "");
+  const [dateTo, setDateTo] = useState(searchParams.get("date_to") || "");
+  const [ticketTypeFilter, setTicketTypeFilter] = useState(searchParams.get("ticket_type_id") || "");
   const [sortKey, setSortKey] = useState("priority");
   const [sortDir, setSortDir] = useState("desc");
   const [showCreate, setShowCreate] = useState(false);
@@ -38,12 +46,14 @@ export default function Tickets() {
   async function load() {
     try {
       const params = statusFilter ? `?status=${statusFilter}` : "";
-      const [tRes, uRes] = await Promise.all([
+      const [tRes, uRes, ttRes] = await Promise.all([
         client.get(`/tickets${params}`),
         client.get("/users"),
+        client.get("/ticket-types"),
       ]);
       setTickets(tRes.data);
       setUsers(uRes.data);
+      setTicketTypes(ttRes.data || []);
     } catch {
       // ignore — client interceptor handles auth errors; network blips are silent
     }
@@ -92,8 +102,10 @@ export default function Tickets() {
         if (!hit) return false;
       }
       if (assignedFilter && (t.assigned_to || "") !== assignedFilter) return false;
+      if (ticketTypeFilter && (t.ticket_type_id || "") !== ticketTypeFilter) return false;
       if (fromTs || toTs) {
-        const ts = t.created_at ? new Date(t.created_at).getTime() : 0;
+        const ticketDate = getTicketDate(t);
+        const ts = ticketDate ? ticketDate.getTime() : 0;
         if (fromTs && ts < fromTs) return false;
         if (toTs   && ts > toTs)   return false;
       }
@@ -119,7 +131,7 @@ export default function Tickets() {
     });
 
     return rows;
-  }, [tickets, search, assignedFilter, dateFrom, dateTo, sortKey, sortDir]);
+  }, [tickets, search, assignedFilter, ticketTypeFilter, dateFrom, dateTo, sortKey, sortDir]);
 
   // phone number → display name lookup
   const userMap = useMemo(() => {
@@ -136,7 +148,7 @@ export default function Tickets() {
       .sort();
   }, [tickets]);
 
-  const hasFilters = search || assignedFilter || dateFrom || dateTo;
+  const hasFilters = search || assignedFilter || ticketTypeFilter || dateFrom || dateTo;
 
   return (
     <div style={styles.page}>
@@ -175,6 +187,15 @@ export default function Tickets() {
           </select>
         </div>
         <div style={styles.filterGroup}>
+          <label style={styles.filterLabel}>Ticket Type</label>
+          <select style={styles.filterInput} value={ticketTypeFilter} onChange={(e) => setTicketTypeFilter(e.target.value)}>
+            <option value="">Any type</option>
+            {ticketTypes.map((tt) => (
+              <option key={tt._id} value={tt._id}>{tt.name}</option>
+            ))}
+          </select>
+        </div>
+        <div style={styles.filterGroup}>
           <label style={styles.filterLabel}>From</label>
           <input type="date" style={styles.filterInput} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         </div>
@@ -185,7 +206,7 @@ export default function Tickets() {
         {hasFilters && (
           <button
             style={styles.btnClear}
-            onClick={() => { setSearch(""); setAssignedFilter(""); setDateFrom(""); setDateTo(""); }}
+            onClick={() => { setSearch(""); setAssignedFilter(""); setTicketTypeFilter(""); setDateFrom(""); setDateTo(""); }}
           >
             Clear
           </button>
@@ -598,4 +619,3 @@ const modal = {
   btnCancel: { background: "#f5f5f5", border: "1px solid #ddd", padding: "8px 16px", borderRadius: 4, cursor: "pointer" },
   btnSave: { background: "#1a1a2e", color: "#fff", border: "none", padding: "8px 20px", borderRadius: 4, cursor: "pointer", fontWeight: "bold" },
 };
-

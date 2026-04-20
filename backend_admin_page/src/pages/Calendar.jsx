@@ -46,20 +46,24 @@ function statusRank(status) {
 export default function Calendar() {
   const [tickets, setTickets] = useState([]);
   const [users, setUsers] = useState([]);
+  const [ticketTypes, setTicketTypes] = useState([]);
   const [month, setMonth] = useState(startOfMonth(new Date()));
   const [statusFilter, setStatusFilter] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("");
   const [machineFilter, setMachineFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
+  const [ticketTypeFilter, setTicketTypeFilter] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [ticketsRes, usersRes] = await Promise.all([
+      const [ticketsRes, usersRes, ticketTypesRes] = await Promise.all([
         client.get("/tickets"),
         client.get("/users"),
+        client.get("/ticket-types"),
       ]);
       setTickets(ticketsRes.data || []);
       setUsers(usersRes.data || []);
+      setTicketTypes(ticketTypesRes.data || []);
     } catch {
       toast.error("Failed to load calendar data");
     }
@@ -100,6 +104,14 @@ export default function Calendar() {
     return [...values].sort((a, b) => b - a);
   }, [tickets]);
 
+  const ticketTypeMap = useMemo(() => {
+    const map = {};
+    ticketTypes.forEach((ticketType) => {
+      map[ticketType._id] = ticketType.name;
+    });
+    return map;
+  }, [ticketTypes]);
+
   const monthStart = startOfMonth(month);
   const monthEnd = endOfMonth(month);
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -114,6 +126,7 @@ export default function Calendar() {
         if (ownerFilter && ticket.assigned_to !== ownerFilter) return false;
         if (machineFilter && getMachineIdentifier(ticket) !== machineFilter) return false;
         if (priorityFilter && (!hasPositivePriority(ticket) || String(ticket.priority) !== priorityFilter)) return false;
+        if (ticketTypeFilter && ticket.ticket_type_id !== ticketTypeFilter) return false;
         return true;
       })
       .sort((a, b) => {
@@ -160,7 +173,7 @@ export default function Calendar() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
         <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           <option value="open">Open</option>
@@ -188,6 +201,13 @@ export default function Calendar() {
             <option key={priority} value={String(priority)}>Priority {priority}</option>
           ))}
         </select>
+
+        <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" value={ticketTypeFilter} onChange={(e) => setTicketTypeFilter(e.target.value)}>
+          <option value="">All ticket types</option>
+          {ticketTypes.map((ticketType) => (
+            <option key={ticketType._id} value={ticketType._id}>{ticketType.name}</option>
+          ))}
+        </select>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -205,9 +225,16 @@ export default function Calendar() {
           {monthDays.map((day) => {
             const key = format(day, "yyyy-MM-dd");
             const dayTickets = ticketsByDay[key] || [];
+            const dayParams = new URLSearchParams({ date_from: key, date_to: key });
+            if (statusFilter) dayParams.set("status", statusFilter);
+            if (ownerFilter) dayParams.set("assigned_to", ownerFilter);
+            if (machineFilter) dayParams.set("machine", machineFilter);
+            if (ticketTypeFilter) dayParams.set("ticket_type_id", ticketTypeFilter);
             return (
               <div key={key} className="min-h-40 border-r border-b border-slate-100 p-2 overflow-y-auto">
-                <div className="mb-2 text-xs font-semibold text-slate-600">{format(day, "d")}</div>
+                <Link to={`/tickets?${dayParams.toString()}`} className="mb-2 inline-block text-xs font-semibold text-slate-600 hover:text-blue-700 hover:underline">
+                  {format(day, "d")}
+                </Link>
                 <div className="space-y-1.5">
                   {dayTickets.map((ticket) => (
                     <Link
@@ -226,6 +253,11 @@ export default function Calendar() {
                         {getMachineIdentifier(ticket) && (
                           <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
                             {getMachineIdentifier(ticket)}
+                          </span>
+                        )}
+                        {ticket.ticket_type_id && (
+                          <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                            {ticketTypeMap[ticket.ticket_type_id] || "Custom"}
                           </span>
                         )}
                         {hasPositivePriority(ticket) && (
