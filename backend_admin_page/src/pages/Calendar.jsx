@@ -34,6 +34,10 @@ function getMachineIdentifier(ticket) {
   return ticket.machine_id || ticket.location || "";
 }
 
+function hasPositivePriority(ticket) {
+  return typeof ticket.priority === "number" && ticket.priority > 0;
+}
+
 function statusRank(status) {
   if (status === "open" || status === "in_progress") return 0;
   return 1;
@@ -91,7 +95,7 @@ export default function Calendar() {
   const priorityOptions = useMemo(() => {
     const values = new Set();
     tickets.forEach((ticket) => {
-      if (typeof ticket.priority === "number" && ticket.priority > 0) values.add(ticket.priority);
+      if (hasPositivePriority(ticket)) values.add(ticket.priority);
     });
     return [...values].sort((a, b) => b - a);
   }, [tickets]);
@@ -109,7 +113,7 @@ export default function Calendar() {
         if (statusFilter && ticket.status !== statusFilter) return false;
         if (ownerFilter && ticket.assigned_to !== ownerFilter) return false;
         if (machineFilter && getMachineIdentifier(ticket) !== machineFilter) return false;
-        if (priorityFilter && String(ticket.priority) !== priorityFilter) return false;
+        if (priorityFilter && (!hasPositivePriority(ticket) || String(ticket.priority) !== priorityFilter)) return false;
         return true;
       })
       .sort((a, b) => {
@@ -143,7 +147,7 @@ export default function Calendar() {
           >
             <ChevronLeft size={16} />
           </button>
-          <div className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 min-w-40 text-center">
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 min-w-[160px] text-center">
             {format(monthStart, "MMMM yyyy")}
           </div>
           <button
@@ -224,7 +228,7 @@ export default function Calendar() {
                             {getMachineIdentifier(ticket)}
                           </span>
                         )}
-                        {typeof ticket.priority === "number" && ticket.priority > 0 && (
+                        {hasPositivePriority(ticket) && (
                           <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
                             P{ticket.priority}
                           </span>
