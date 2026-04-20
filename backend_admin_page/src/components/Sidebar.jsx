@@ -70,7 +70,7 @@ export default function Sidebar({ onClose }) {
 
       {/* Nav links */}
       <ul className="flex-1 space-y-0.5 px-3">
-        {NAV.map(({ to, icon, label }) => (
+        {NAV.map(({ to, icon: Icon, label }) => (
           <li key={to}>
             <NavLink
               to={to}
@@ -84,7 +84,7 @@ export default function Sidebar({ onClose }) {
               }
               style={({ isActive }) => isActive ? {background: '#ee6300'} : {}}
             >
-              {createElement(icon, { size: 17 })}
+              {createElement(Icon, { size: 17 })}
               {label}
             </NavLink>
           </li>

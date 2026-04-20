@@ -30,6 +30,10 @@ function getTicketDate(ticket) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function getMachineIdentifier(ticket) {
+  return ticket.machine_id || ticket.location || "";
+}
+
 function statusRank(status) {
   if (status === "open" || status === "in_progress") return 0;
   return 1;
@@ -53,7 +57,7 @@ export default function Calendar() {
       setTickets(ticketsRes.data || []);
       setUsers(usersRes.data || []);
     } catch {
-      toast.error("Failed to load calendar tickets");
+      toast.error("Failed to load calendar data");
     }
   }, []);
 
@@ -78,7 +82,7 @@ export default function Calendar() {
   const machineOptions = useMemo(() => {
     const values = new Set();
     tickets.forEach((ticket) => {
-      const machine = ticket.machine_id || ticket.location;
+      const machine = getMachineIdentifier(ticket);
       if (machine) values.add(machine);
     });
     return [...values].sort();
@@ -87,7 +91,7 @@ export default function Calendar() {
   const priorityOptions = useMemo(() => {
     const values = new Set();
     tickets.forEach((ticket) => {
-      if (typeof ticket.priority === "number") values.add(ticket.priority);
+      if (typeof ticket.priority === "number" && ticket.priority > 0) values.add(ticket.priority);
     });
     return [...values].sort((a, b) => b - a);
   }, [tickets]);
@@ -96,16 +100,15 @@ export default function Calendar() {
   const monthEnd = endOfMonth(month);
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
   const leadingEmptyCells = Array.from({ length: getDay(monthStart) });
-  const activeMonth = startOfMonth(month);
   const ticketsByDay = (() => {
     const map = {};
     tickets
       .filter((ticket) => {
         const ticketDate = getTicketDate(ticket);
-        if (!ticketDate || !isSameMonth(ticketDate, activeMonth)) return false;
+        if (!ticketDate || !isSameMonth(ticketDate, monthStart)) return false;
         if (statusFilter && ticket.status !== statusFilter) return false;
         if (ownerFilter && ticket.assigned_to !== ownerFilter) return false;
-        if (machineFilter && (ticket.machine_id || ticket.location) !== machineFilter) return false;
+        if (machineFilter && getMachineIdentifier(ticket) !== machineFilter) return false;
         if (priorityFilter && String(ticket.priority) !== priorityFilter) return false;
         return true;
       })
@@ -216,14 +219,16 @@ export default function Calendar() {
                         <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
                           {userMap[ticket.assigned_to] || ticket.assigned_to || "Unassigned"}
                         </span>
-                        {(ticket.machine_id || ticket.location) && (
+                        {getMachineIdentifier(ticket) && (
                           <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                            {ticket.machine_id || ticket.location}
+                            {getMachineIdentifier(ticket)}
                           </span>
                         )}
-                        <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
-                          P{Number(ticket.priority || 0)}
-                        </span>
+                        {typeof ticket.priority === "number" && ticket.priority > 0 && (
+                          <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+                            P{ticket.priority}
+                          </span>
+                        )}
                       </div>
                     </Link>
                   ))}
